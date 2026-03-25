@@ -6,7 +6,7 @@ export const authenticate = (req, res, next) => {
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({ error: "Authentication required" });
+      return res.status(401).json({ message: "Authentication required" });
     }
 
     const token = authHeader.substring(7); // Remove 'Bearer ' prefix
@@ -15,7 +15,7 @@ export const authenticate = (req, res, next) => {
     const decoded = verifyToken(token);
 
     if (!decoded) {
-      return res.status(401).json({ error: "Invalid token" });
+      return res.status(401).json({ message: "Invalid token" });
     }
 
     // Add user info to request
@@ -23,7 +23,7 @@ export const authenticate = (req, res, next) => {
     next();
   } catch (err) {
     console.error("Authentication error:", err);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(500).json({ message: "Internal server error" });
   }
 };
 
@@ -31,7 +31,7 @@ export const authorizeAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
     return res
       .status(403)
-      .json({ error: "Access forbidden: Admin rights required" });
+      .json({ message: "Access forbidden: Admin rights required" });
   }
   next();
 };
