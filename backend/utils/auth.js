@@ -2,15 +2,29 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import crypto from "node:crypto";
 
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!JWT_SECRET || JWT_SECRET.includes("change-this")) {
-  throw new Error(
-    "FATAL: JWT_SECRET is not set or still has the placeholder value. Set a strong secret in .env",
-  );
+let _secret = null;
+let _validated = false;
+
+function getSecret() {
+  if (!_validated) {
+    _secret = process.env.JWT_SECRET;
+    if (!_secret || _secret.includes("change-this")) {
+      throw new Error(
+        "FATAL: JWT_SECRET is not set or still has the placeholder value. Set a strong secret in .env",
+      );
+    }
+    _validated = true;
+  }
+  return _secret;
 }
 
-const JWT_ACCESS_EXPIRY = process.env.JWT_ACCESS_EXPIRY || "1h";
-const JWT_REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
+function getAccessExpiry() {
+  return process.env.JWT_ACCESS_EXPIRY || "1h";
+}
+
+function getRefreshExpiry() {
+  return process.env.JWT_REFRESH_EXPIRY || "7d";
+}
 
 export const hashPassword = async (password) => {
   const saltRounds = 12;
@@ -24,14 +38,14 @@ export const comparePassword = async (password, hash) => {
 export const generateAccessToken = (user) => {
   return jwt.sign(
     { id: user.id, email: user.email, role: user.role },
-    JWT_SECRET,
-    { expiresIn: JWT_ACCESS_EXPIRY },
+    getSecret(),
+    { expiresIn: getAccessExpiry() },
   );
 };
 
 export const generateRefreshToken = (user) => {
-  return jwt.sign({ id: user.id, type: "refresh" }, JWT_SECRET, {
-    expiresIn: JWT_REFRESH_EXPIRY,
+  return jwt.sign({ id: user.id, type: "refresh" }, getSecret(), {
+    expiresIn: getRefreshExpiry(),
   });
 };
 
@@ -40,14 +54,10 @@ export const generateToken = generateAccessToken;
 
 export const verifyToken = (token) => {
   try {
-    return jwt.verify(token, JWT_SECRET);
+    return jwt.verify(token, getSecret());
   } catch (error) {
     return null;
   }
 };
 
-/**
- * Generate a cryptographically strong random secret.
- * Useful for initial setup: node -e "import('./utils/auth.js')"
- */
 export const generateSecret = () => crypto.randomBytes(64).toString("hex");
