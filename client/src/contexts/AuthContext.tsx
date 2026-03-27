@@ -33,6 +33,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 interface LoginResponse {
   access_token: string;
+  refresh_token: string;
   user: Profile & { email: string };
 }
 
@@ -74,6 +75,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       api.setToken(data.access_token);
+      api.setRefreshToken(data.refresh_token);
       const profile = data.user;
       setState({
         user: { id: profile.id, email: profile.email ?? email },
@@ -91,6 +93,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function signOut() {
     api.setToken(null);
+    api.setRefreshToken(null);
     setState({ user: null, profile: null, loading: false, role: null });
   }
 

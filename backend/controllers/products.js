@@ -157,8 +157,18 @@ function normalizeProductCreate(body) {
 
 export const getAllProducts = async (req, res) => {
   try {
-    const result = await query("SELECT * FROM products");
-    res.json(result.rows);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
+    const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+
+    const countResult = await query("SELECT COUNT(*) FROM products");
+    const total = parseInt(countResult.rows[0].count);
+
+    const result = await query(
+      "SELECT * FROM products ORDER BY created_at DESC LIMIT $1 OFFSET $2",
+      [limit, offset],
+    );
+
+    res.json({ items: result.rows, total, limit, offset });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -261,5 +271,152 @@ export const updateProduct = async (req, res) => {
     res.json(result.rows[0]);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+// Search product by barcode (primary or in barcodes array)
+export const getProductByBarcode = async (req, res) => {
+  const { barcode } = req.params;
+  try {
+    const result = await query(
+      `SELECT * FROM products
+       WHERE (barcode = $1 OR $1 = ANY(barcodes))
+         AND is_active = true
+       LIMIT 1`,
+      [barcode.trim()],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Toggle active/inactive
+export const toggleProductActive = async (req, res) => {
+  const { id } = req.params;
+  try {
+    const result = await query(
+      `UPDATE products SET is_active = NOT is_active, updated_at = NOW()
+       WHERE id = $1 RETURNING *`,
+      [id],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Soft delete (set inactive) or hard delete if no references
+export const deleteProduct = async (req, res) => {
+  const { id } = req.params;
+  try {
+    // Check for related sale_items or stock_movements
+    const refs = await query(
+      `SELECT
+        (SELECT COUNT(*) FROM sale_items WHERE product_id = $1)::int AS sales,
+        (SELECT COUNT(*) FROM stock_movements WHERE product_id = $1)::int AS movements`,
+      [id],
+    );
+    const { sales, movements } = refs.rows[0];
+
+    if (sales > 0 || movements > 0) {
+      // Soft delete
+      const result = await query(
+        "UPDATE products SET is_active = false, updated_at = NOW() WHERE id = $1 RETURNING id",
+        [id],
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ message: "Producto no encontrado" });
+      }
+      return res.status(204).send();
+    }
+
+    // Hard delete
+    const result = await query(
+      "DELETE FROM products WHERE id = $1 RETURNING id",
+      [id],
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ message: "Producto no encontrado" });
+    }
+    res.status(204).send();
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// Bulk create products (transactional)
+export const bulkCreateProducts = async (req, res) => {
+  const { products } = req.body;
+
+  if (!Array.isArray(products) || products.length === 0) {
+    return res
+      .status(400)
+      .json({ message: "Se requiere un array de productos" });
+  }
+
+  try {
+    const { withTransaction } = await import("../utils/db.js");
+
+    const details = await withTransaction(async (txQuery) => {
+      const results = [];
+      for (let i = 0; i < products.length; i++) {
+        const raw = products[i];
+        const { data, error } = normalizeProductCreate(raw);
+
+        if (error) {
+          throw new Error(`Fila ${i + 1} (${raw.name || "?"}): ${error}`);
+        }
+
+        // Resolve category by name if provided
+        let categoryId = data.category_id;
+        if (!categoryId && raw.category_name) {
+          const catResult = await txQuery(
+            "SELECT id FROM categories WHERE LOWER(name) = LOWER($1)",
+            [raw.category_name.trim()],
+          );
+          if (catResult.rows.length > 0) {
+            categoryId = catResult.rows[0].id;
+          }
+        }
+
+        const result = await txQuery(
+          `INSERT INTO products (barcode, barcodes, name, description, category_id, cost_price, sell_price, stock_quantity, min_stock_alert, is_active, image_url)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+          [
+            data.barcode,
+            data.barcodes,
+            data.name,
+            data.description,
+            categoryId,
+            data.cost_price,
+            data.sell_price,
+            data.stock_quantity,
+            data.min_stock_alert,
+            data.is_active,
+            data.image_url,
+          ],
+        );
+        results.push({ row: i + 1, name: data.name, id: result.rows[0].id });
+      }
+      return results;
+    });
+
+    res
+      .status(201)
+      .json({
+        created: details.length,
+        failed: 0,
+        total: products.length,
+        details,
+      });
+  } catch (err) {
+    res.status(400).json({ message: err.message });
   }
 };

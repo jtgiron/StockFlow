@@ -1,16 +1,51 @@
 import { query } from "../database.js";
-import { hashPassword, comparePassword, generateToken } from "../utils/auth.js";
+import {
+  hashPassword,
+  comparePassword,
+  generateAccessToken,
+  generateRefreshToken,
+  verifyToken,
+} from "../utils/auth.js";
+import { AppError } from "../utils/errors.js";
 
-export const register = async (req, res) => {
+// Simple validators
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MIN_PASSWORD_LENGTH = 8;
+
+export const register = async (req, res, next) => {
   try {
-    const { email, password, fullName } = req.body;
+    const { email, password, full_name } = req.body;
+
+    // Input validation
+    if (!email || typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
+      throw new AppError(400, "Email inválido");
+    }
+    if (
+      !password ||
+      typeof password !== "string" ||
+      password.length < MIN_PASSWORD_LENGTH
+    ) {
+      throw new AppError(
+        400,
+        `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
+      );
+    }
+    if (
+      !full_name ||
+      typeof full_name !== "string" ||
+      full_name.trim() === ""
+    ) {
+      throw new AppError(400, "El nombre completo es obligatorio");
+    }
+
+    const sanitizedEmail = email.trim().toLowerCase();
 
     // Check if user already exists
     const existingUser = await query("SELECT id FROM users WHERE email = $1", [
-      email,
+      sanitizedEmail,
     ]);
     if (existingUser.rows.length > 0) {
-      return res.status(400).json({ message: "User already exists" });
+      throw new AppError(409, "El usuario ya existe");
     }
 
     // Hash password
@@ -19,35 +54,44 @@ export const register = async (req, res) => {
     // Create user
     const result = await query(
       "INSERT INTO users(email, password_hash, full_name, role, is_active) VALUES($1, $2, $3, $4, $5) RETURNING id, email, full_name, role",
-      [email, hashedPassword, fullName, "employee", true],
+      [sanitizedEmail, hashedPassword, full_name.trim(), "employee", true],
     );
 
-    // Generate token
-    const token = generateToken(result.rows[0]);
+    const user = result.rows[0];
+
+    // Generate tokens
+    const access_token = generateAccessToken(user);
+    const refresh_token = generateRefreshToken(user);
 
     res.status(201).json({
       message: "User registered successfully",
-      user: result.rows[0],
-      token,
+      user,
+      access_token,
+      refresh_token,
     });
   } catch (err) {
-    console.error("Registration error:", err);
-    res.status(500).json({ message: "Internal server error" });
+    next(err);
   }
 };
 
-export const login = async (req, res) => {
+export const login = async (req, res, next) => {
   try {
     const { email, password } = req.body;
+
+    if (!email || !password) {
+      throw new AppError(400, "Email y contraseña son obligatorios");
+    }
+
+    const sanitizedEmail = String(email).trim().toLowerCase();
 
     // Find user
     const result = await query(
       "SELECT id, email, full_name, role, password_hash FROM users WHERE email = $1 AND is_active = true",
-      [email],
+      [sanitizedEmail],
     );
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      throw new AppError(401, "Credenciales inválidas");
     }
 
     const user = result.rows[0];
@@ -55,11 +99,12 @@ export const login = async (req, res) => {
     // Check password
     const isValidPassword = await comparePassword(password, user.password_hash);
     if (!isValidPassword) {
-      return res.status(401).json({ message: "Invalid credentials" });
+      throw new AppError(401, "Credenciales inválidas");
     }
 
-    // Generate token
-    const token = generateToken(user);
+    // Generate tokens
+    const access_token = generateAccessToken(user);
+    const refresh_token = generateRefreshToken(user);
 
     // Remove password_hash from user object
     const { password_hash, ...userWithoutPassword } = user;
@@ -67,15 +112,49 @@ export const login = async (req, res) => {
     res.json({
       message: "Login successful",
       user: userWithoutPassword,
-      access_token: token,
+      access_token,
+      refresh_token,
     });
   } catch (err) {
-    console.error("Login error:", err);
-    res.status(500).json({ message: "Internal server error" });
+    next(err);
   }
 };
 
-export const getProfile = async (req, res) => {
+export const refreshToken = async (req, res, next) => {
+  try {
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+      throw new AppError(400, "refresh_token es obligatorio");
+    }
+
+    const decoded = verifyToken(refresh_token);
+    if (!decoded || decoded.type !== "refresh") {
+      throw new AppError(401, "Refresh token inválido o expirado");
+    }
+
+    // Look up current user state (role may have changed)
+    const result = await query(
+      "SELECT id, email, full_name, role FROM users WHERE id = $1 AND is_active = true",
+      [decoded.id],
+    );
+
+    if (result.rows.length === 0) {
+      throw new AppError(401, "Usuario no encontrado o desactivado");
+    }
+
+    const user = result.rows[0];
+
+    const access_token = generateAccessToken(user);
+    const new_refresh_token = generateRefreshToken(user);
+
+    res.json({ access_token, refresh_token: new_refresh_token });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getProfile = async (req, res, next) => {
   try {
     const userId = req.user.id;
 
@@ -85,12 +164,11 @@ export const getProfile = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "User not found" });
+      throw new AppError(404, "Usuario no encontrado");
     }
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Get profile error:", err);
-    res.status(500).json({ message: "Internal server error" });
+    next(err);
   }
 };

@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "backend-patterns": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "computedHash": "6456e45aca107569db0bf67910f58b60af891330864bfdb3fc1c7a9df1ceffbc"
+    },
     "express-rest-api": {
       "source": "pluginagentmarketplace/custom-plugin-nodejs",
       "sourceType": "github",

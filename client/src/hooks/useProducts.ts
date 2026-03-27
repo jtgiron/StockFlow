@@ -22,8 +22,15 @@ export function useProducts() {
   const fetchProducts = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await api.get<Product[]>("/products");
-      setProducts(data);
+      const data = await api.get<
+        { items: Product[]; total: number } | Product[]
+      >("/products?limit=200");
+      // Support both paginated and array responses
+      if (Array.isArray(data)) {
+        setProducts(data);
+      } else {
+        setProducts(data.items);
+      }
     } catch {
       toast.error("Error cargando productos");
     }

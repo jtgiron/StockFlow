@@ -24,7 +24,7 @@ export default function ProductsPage() {
   const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
-  
+ 
   const [editing, setEditing] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);

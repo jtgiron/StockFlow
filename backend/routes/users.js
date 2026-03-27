@@ -5,11 +5,11 @@ import {
   listUsers,
   updateUserRole,
 } from "../controllers/users.js";
-import { authenticate, authorizeAdmin } from "../middlewares/auth.js";
+import { authenticate, authorize } from "../middlewares/auth.js";
 
 const router = Router();
 
-router.use(authenticate, authorizeAdmin);
+router.use(authenticate, authorize("admin"));
 
 router.get("/", listUsers);
 router.post("/", createUser);

@@ -4,10 +4,6 @@ function toSnakeCase(str: string): string {
   return str.replace(/[A-Z]/g, (c) => "_" + c.toLowerCase());
 }
 
-function toCamelCase(str: string): string {
-  return str.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
-}
-
 function transformKeys<T>(obj: unknown, fn: (key: string) => string): T {
   if (Array.isArray(obj))
     return obj.map((item) => transformKeys(item, fn)) as T;
@@ -31,11 +27,48 @@ function setToken(token: string | null): void {
   else localStorage.removeItem("auth_token");
 }
 
+function getRefreshToken(): string | null {
+  return localStorage.getItem("refresh_token");
+}
+
+function setRefreshToken(token: string | null): void {
+  if (token) localStorage.setItem("refresh_token", token);
+  else localStorage.removeItem("refresh_token");
+}
+
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
     super(message);
     this.status = status;
+  }
+}
+
+let refreshPromise: Promise<boolean> | null = null;
+
+async function tryRefresh(): Promise<boolean> {
+  const rt = getRefreshToken();
+  if (!rt) return false;
+
+  try {
+    const res = await fetch(`${API_URL}/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token: rt }),
+    });
+
+    if (!res.ok) {
+      setToken(null);
+      setRefreshToken(null);
+      return false;
+    }
+
+    const data = await res.json();
+    setToken(data.access_token);
+    setRefreshToken(data.refresh_token);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -50,14 +83,43 @@ async function request<T>(
   const token = getToken();
   if (token) headers["Authorization"] = `Bearer ${token}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
+  let res = await fetch(`${API_URL}${path}`, {
     method,
     headers,
     body:
       body != null
-        ? JSON.stringify(transformKeys(body, toCamelCase))
+        ? JSON.stringify(transformKeys(body, toSnakeCase))
         : undefined,
   });
+
+  // Auto-refresh on 401
+  if (
+    res.status === 401 &&
+    getRefreshToken() &&
+    !path.includes("/auth/refresh")
+  ) {
+    if (!refreshPromise) {
+      refreshPromise = tryRefresh().finally(() => {
+        refreshPromise = null;
+      });
+    }
+    const refreshed = await refreshPromise;
+    if (refreshed) {
+      // Retry original request with new token
+      const newHeaders: Record<string, string> = {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${getToken()}`,
+      };
+      res = await fetch(`${API_URL}${path}`, {
+        method,
+        headers: newHeaders,
+        body:
+          body != null
+            ? JSON.stringify(transformKeys(body, toSnakeCase))
+            : undefined,
+      });
+    }
+  }
 
   if (!res.ok) {
     const err = await res
@@ -85,4 +147,6 @@ export const api = {
   delete: <T>(path: string) => request<T>("DELETE", path),
   setToken,
   getToken,
+  setRefreshToken,
+  getRefreshToken,
 };

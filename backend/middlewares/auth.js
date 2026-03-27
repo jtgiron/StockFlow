@@ -2,23 +2,19 @@ import { verifyToken } from "../utils/auth.js";
 
 export const authenticate = (req, res, next) => {
   try {
-    // Get token from header
     const authHeader = req.headers.authorization;
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return res.status(401).json({ message: "Authentication required" });
     }
 
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    // Verify token
+    const token = authHeader.substring(7);
     const decoded = verifyToken(token);
 
     if (!decoded) {
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    // Add user info to request
     req.user = decoded;
     next();
   } catch (err) {
@@ -31,7 +27,24 @@ export const authorizeAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
     return res
       .status(403)
-      .json({ message: "Access forbidden: Admin rights required" });
+      .json({
+        message: "Acceso denegado: se requieren permisos de administrador",
+      });
   }
   next();
+};
+
+/**
+ * Middleware that allows access only to the specified roles.
+ * Usage: authorize('admin', 'employee')
+ */
+export const authorize = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({
+        message: `Acceso denegado: se requiere rol ${roles.join(" o ")}`,
+      });
+    }
+    next();
+  };
 };
