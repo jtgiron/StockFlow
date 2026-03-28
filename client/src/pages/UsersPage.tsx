@@ -15,6 +15,7 @@ export default function UsersPage() {
   const {
     createUser,
     deleteUser,
+    generateResetCode,
     loading: userActionLoading,
   } = useUserManagement();
   const [users, setUsers] = useState<Profile[]>([]);
@@ -32,6 +33,11 @@ export default function UsersPage() {
   const [deleteUserTarget, setDeleteUserTarget] = useState<Profile | null>(
     null,
   );
+  const [resetTarget, setResetTarget] = useState<Profile | null>(null);
+  const [generatedResetCode, setGeneratedResetCode] = useState<{
+    code: string;
+    expiresAt: string;
+  } | null>(null);
 
   async function fetchUsers() {
     setLoading(true);
@@ -91,6 +97,18 @@ export default function UsersPage() {
     }
   }
 
+  async function handleGenerateResetCode(user: Profile) {
+    const data = await generateResetCode(user.id);
+    if (!data) return;
+
+    setGeneratedResetCode({
+      code: data.reset_code,
+      expiresAt: data.expires_at,
+    });
+    setResetTarget(user);
+    toast.success("Código generado");
+  }
+
   const columns = [
     { header: "Nombre", accessor: (u: Profile) => u.full_name || "—" },
     {
@@ -115,6 +133,13 @@ export default function UsersPage() {
             className="text-xs text-amber-400 hover:text-amber-300"
           >
             Cambiar rol
+          </button>
+          <button
+            onClick={() => handleGenerateResetCode(u)}
+            className="text-xs text-blue-400 hover:text-blue-300"
+            disabled={userActionLoading}
+          >
+            Generar código reset
           </button>
           <button
             onClick={() => setDeleteUserTarget(u)}
@@ -259,6 +284,53 @@ export default function UsersPage() {
               className="bg-red-600 hover:bg-red-500"
             >
               Eliminar usuario
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Reset code modal */}
+      <Modal
+        open={!!resetTarget && !!generatedResetCode}
+        onClose={() => {
+          setResetTarget(null);
+          setGeneratedResetCode(null);
+        }}
+        title="Código de recuperación generado"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-surface-300">
+            Comparte este código con
+            <span className="font-semibold text-surface-100">
+              {` ${resetTarget?.full_name ?? "el usuario"}`}
+            </span>
+            . Es de un solo uso.
+          </p>
+
+          <div className="rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-4 text-center">
+            <p className="text-xs uppercase tracking-[0.2em] text-blue-300">
+              Código
+            </p>
+            <p className="mt-2 font-mono text-3xl font-semibold text-blue-100">
+              {generatedResetCode?.code}
+            </p>
+          </div>
+
+          <p className="text-xs text-surface-400">
+            Expira:{" "}
+            {generatedResetCode
+              ? new Date(generatedResetCode.expiresAt).toLocaleString("es-AR")
+              : "-"}
+          </p>
+
+          <div className="flex justify-end">
+            <Button
+              onClick={() => {
+                setResetTarget(null);
+                setGeneratedResetCode(null);
+              }}
+            >
+              Listo
             </Button>
           </div>
         </div>

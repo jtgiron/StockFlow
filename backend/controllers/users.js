@@ -1,5 +1,11 @@
 import { query } from "../database.js";
 import { hashPassword } from "../utils/auth.js";
+import {
+  generateLocalResetCode,
+  getLocalResetCodeExpiryDate,
+  getLocalResetCodeExpiryMinutes,
+  hashLocalResetCode,
+} from "../utils/localResetCodes.js";
 
 const VALID_ROLES = new Set(["admin", "employee"]);
 
@@ -120,6 +126,50 @@ export const deleteUser = async (req, res) => {
     res.status(204).send();
   } catch (err) {
     console.error("Delete user error:", err);
+    res.status(500).json({ message: "Error interno del servidor" });
+  }
+};
+
+export const generatePasswordResetCode = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const userResult = await query(
+      "SELECT id, full_name FROM users WHERE id = $1 AND is_active = true",
+      [id],
+    );
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({ message: "Usuario no encontrado" });
+    }
+
+    const resetCode = generateLocalResetCode();
+    const codeHash = hashLocalResetCode(resetCode);
+    const expiresAt = getLocalResetCodeExpiryDate();
+
+    await query(
+      "UPDATE local_password_reset_codes SET used_at = NOW() WHERE user_id = $1 AND used_at IS NULL",
+      [id],
+    );
+    await query(
+      `INSERT INTO local_password_reset_codes
+       (user_id, code_hash, expires_at, created_by_user_id)
+       VALUES ($1, $2, $3, $4)`,
+      [id, codeHash, expiresAt, req.user.id],
+    );
+
+    res.json({
+      message: "Código de recuperación generado",
+      reset_code: resetCode,
+      expires_at: expiresAt,
+      expires_in_minutes: getLocalResetCodeExpiryMinutes(),
+      user: {
+        id: userResult.rows[0].id,
+        full_name: userResult.rows[0].full_name,
+      },
+    });
+  } catch (err) {
+    console.error("Generate reset code error:", err);
     res.status(500).json({ message: "Error interno del servidor" });
   }
 };

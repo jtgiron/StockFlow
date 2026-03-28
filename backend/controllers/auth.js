@@ -6,11 +6,17 @@ import {
   generateRefreshToken,
   verifyToken,
 } from "../utils/auth.js";
+import { withTransaction } from "../utils/db.js";
 import { AppError } from "../utils/errors.js";
+import { hashLocalResetCode } from "../utils/localResetCodes.js";
 
 // Simple validators
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+
+function normalizeEmail(email) {
+  return typeof email === "string" ? email.trim().toLowerCase() : "";
+}
 
 export const register = async (req, res, next) => {
   try {
@@ -38,7 +44,7 @@ export const register = async (req, res, next) => {
       throw new AppError(400, "El nombre completo es obligatorio");
     }
 
-    const sanitizedEmail = email.trim().toLowerCase();
+    const sanitizedEmail = normalizeEmail(email);
 
     // Check if user already exists
     const existingUser = await query("SELECT id FROM users WHERE email = $1", [
@@ -82,7 +88,7 @@ export const login = async (req, res, next) => {
       throw new AppError(400, "Email y contraseña son obligatorios");
     }
 
-    const sanitizedEmail = String(email).trim().toLowerCase();
+    const sanitizedEmail = normalizeEmail(email);
 
     // Find user
     const result = await query(
@@ -168,6 +174,84 @@ export const getProfile = async (req, res, next) => {
     }
 
     res.json(result.rows[0]);
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const resetPasswordWithCode = async (req, res, next) => {
+  try {
+    const sanitizedEmail = normalizeEmail(req.body?.email);
+    const resetCode =
+      typeof req.body?.reset_code === "string"
+        ? req.body.reset_code.trim()
+        : typeof req.body?.resetCode === "string"
+          ? req.body.resetCode.trim()
+          : "";
+    const newPassword =
+      typeof req.body?.new_password === "string"
+        ? req.body.new_password
+        : typeof req.body?.newPassword === "string"
+          ? req.body.newPassword
+          : "";
+
+    if (!sanitizedEmail || !EMAIL_RE.test(sanitizedEmail)) {
+      throw new AppError(400, "Email inválido");
+    }
+
+    if (!resetCode) {
+      throw new AppError(400, "El código de recuperación es obligatorio");
+    }
+
+    if (newPassword.length < MIN_PASSWORD_LENGTH) {
+      throw new AppError(
+        400,
+        `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
+      );
+    }
+
+    const resetCodeHash = hashLocalResetCode(resetCode);
+
+    await withTransaction(async (tx) => {
+      const tokenResult = await tx(
+        `SELECT lrc.id, lrc.user_id
+         FROM local_password_reset_codes lrc
+         JOIN users u ON u.id = lrc.user_id
+         WHERE u.email = $1
+           AND lrc.code_hash = $2
+           AND lrc.used_at IS NULL
+           AND lrc.expires_at > NOW()
+           AND u.is_active = true
+         ORDER BY lrc.created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        [sanitizedEmail, resetCodeHash],
+      );
+
+      if (tokenResult.rows.length === 0) {
+        throw new AppError(400, "Código inválido o expirado");
+      }
+
+      const passwordHash = await hashPassword(newPassword);
+      const tokenRow = tokenResult.rows[0];
+
+      await tx(
+        "UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2",
+        [passwordHash, tokenRow.user_id],
+      );
+      await tx(
+        "UPDATE local_password_reset_codes SET used_at = NOW() WHERE id = $1",
+        [tokenRow.id],
+      );
+      await tx(
+        `UPDATE local_password_reset_codes
+         SET used_at = NOW()
+         WHERE user_id = $1 AND id <> $2 AND used_at IS NULL`,
+        [tokenRow.user_id, tokenRow.id],
+      );
+    });
+
+    res.json({ message: "Contraseña actualizada correctamente" });
   } catch (err) {
     next(err);
   }
