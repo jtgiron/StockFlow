@@ -51,5 +51,24 @@ export function useUserManagement() {
     }
   }, []);
 
-  return { createUser, deleteUser, loading };
+  const generateResetCode = useCallback(async (userId: string) => {
+    setLoading(true);
+    try {
+      const data = await api.post<{
+        reset_code: string;
+        expires_at: string;
+        expires_in_minutes: number;
+      }>(`/users/${userId}/reset-code`);
+      return data;
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Error al generar código",
+      );
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { createUser, deleteUser, generateResetCode, loading };
 }

@@ -3,6 +3,7 @@ import { useAuth } from "./contexts/AuthContext";
 import AppLayout from "./components/layout/AppLayout";
 import ProtectedRoute from "./components/layout/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import DashboardPage from "./pages/DashboardPage";
 import POSPage from "./pages/POSPage.tsx";
 import ProductsPage from "./pages/ProductsPage.tsx";
@@ -33,6 +34,14 @@ export default function Router() {
       <Routes>
         <Route path="/" element={loginElement} />
         <Route path="/login" element={loginElement} />
+        <Route
+          path="/reset-password"
+          element={
+            <AuthGuard>
+              <ResetPasswordPage />
+            </AuthGuard>
+          }
+        />
 
         <Route
           element={
