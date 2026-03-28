@@ -51,6 +51,7 @@ export interface StockMovement {
 export interface CashRegister {
   id: number;
   user_id: string;
+  closed_by_user_id?: string | null;
   opened_at: string;
   closed_at: string | null;
   openingcash_amount: number;
@@ -62,6 +63,8 @@ export interface CashRegister {
   status: "open" | "closed";
   notes: string | null;
   profile?: Profile;
+  opened_by_user?: Pick<Profile, "id" | "full_name" | "role">;
+  closed_by_user?: Pick<Profile, "id" | "full_name" | "role"> | null;
 }
 
 export type SaleStatus = "completed" | "cancelled" | "pending";

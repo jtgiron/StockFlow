@@ -7,9 +7,14 @@ export const getCurrent = async (req, res, next) => {
     const userId = req.user.id;
     const result = await query(
       `SELECT cr.*,
-              json_build_object('id', u.id, 'full_name', u.full_name, 'role', u.role) AS user
+              json_build_object('id', opener.id, 'full_name', opener.full_name, 'role', opener.role) AS opened_by_user,
+              CASE
+                WHEN closer.id IS NULL THEN NULL
+                ELSE json_build_object('id', closer.id, 'full_name', closer.full_name, 'role', closer.role)
+              END AS closed_by_user
        FROM cash_registers cr
-       JOIN users u ON u.id = cr.user_id
+       JOIN users opener ON opener.id = cr.user_id
+       LEFT JOIN users closer ON closer.id = cr.closed_by_user_id
        WHERE cr.user_id = $1 AND cr.status = 'open'
        ORDER BY cr.opened_at DESC LIMIT 1`,
       [userId],
@@ -112,8 +117,9 @@ export const closeRegister = async (req, res, next) => {
            expected_qr_amount = $4,
            difference = $5,
            status = 'closed',
-           notes = $6
-       WHERE id = $7
+           notes = $6,
+           closed_by_user_id = $7
+       WHERE id = $8
        RETURNING *`,
       [
         cashAmount,
@@ -122,6 +128,7 @@ export const closeRegister = async (req, res, next) => {
         expectedQr,
         difference,
         notes || null,
+        userId,
         id,
       ],
     );
@@ -142,9 +149,14 @@ export const getHistory = async (req, res, next) => {
 
     const result = await query(
       `SELECT cr.*,
-              json_build_object('id', u.id, 'full_name', u.full_name, 'role', u.role) AS user
+              json_build_object('id', opener.id, 'full_name', opener.full_name, 'role', opener.role) AS opened_by_user,
+              CASE
+                WHEN closer.id IS NULL THEN NULL
+                ELSE json_build_object('id', closer.id, 'full_name', closer.full_name, 'role', closer.role)
+              END AS closed_by_user
        FROM cash_registers cr
-       JOIN users u ON u.id = cr.user_id
+       JOIN users opener ON opener.id = cr.user_id
+       LEFT JOIN users closer ON closer.id = cr.closed_by_user_id
        ORDER BY cr.opened_at DESC
        LIMIT $1 OFFSET $2`,
       [limit, offset],
@@ -167,6 +179,7 @@ function mapRegister(row) {
   return {
     id: row.id,
     user_id: row.user_id,
+    closed_by_user_id: row.closed_by_user_id,
     opened_at: row.opened_at,
     closed_at: row.closed_at,
     openingcash_amount: parseFloat(row.opening_cash_amount ?? 0),
@@ -187,7 +200,9 @@ function mapRegister(row) {
     difference: row.difference != null ? parseFloat(row.difference) : null,
     status: row.status,
     notes: row.notes,
-    profile: row.user ?? undefined,
-    user: row.user ?? undefined,
+    profile: row.opened_by_user ?? undefined,
+    user: row.opened_by_user ?? undefined,
+    opened_by_user: row.opened_by_user ?? undefined,
+    closed_by_user: row.closed_by_user ?? undefined,
   };
 }
