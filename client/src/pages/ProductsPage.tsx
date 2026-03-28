@@ -24,11 +24,13 @@ export default function ProductsPage() {
   const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
- 
+
   const [editing, setEditing] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [showInactive, setShowInactive] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const filtered = products.filter((p) => {
     const searchValue = search.toLowerCase();
@@ -40,6 +42,9 @@ export default function ProductsPage() {
     const matchesActive = showInactive || p.is_active;
     return matchesSearch && matchesActive;
   });
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
   function openCreate() {
     setEditing(null);
@@ -72,7 +77,6 @@ export default function ProductsPage() {
           action={
             isAdmin && (
               <div className="flex gap-2">
-                
                 <Button onClick={openCreate}>
                   <svg
                     className="w-4 h-4"
@@ -99,15 +103,24 @@ export default function ProductsPage() {
             <SearchInput
               placeholder="Buscar por nombre, código de barras o categoría..."
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onClear={() => setSearch("")}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              onClear={() => {
+                setSearch("");
+                setPage(1);
+              }}
             />
           </div>
           <label className="flex items-center gap-2 text-sm text-surface-400 cursor-pointer">
             <input
               type="checkbox"
               checked={showInactive}
-              onChange={(e) => setShowInactive(e.target.checked)}
+              onChange={(e) => {
+                setShowInactive(e.target.checked);
+                setPage(1);
+              }}
               className="rounded border-surface-600 bg-surface-800"
             />
             Inactivos
@@ -117,119 +130,164 @@ export default function ProductsPage() {
         {loading ? (
           <div className="text-center py-8 text-surface-400">Cargando...</div>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-surface-800">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-surface-800 bg-surface-900/60">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Producto
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Código
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Categoría
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Costo
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Venta
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Stock
-                  </th>
-                  <th className="px-4 py-3 text-center text-xs font-medium text-surface-400 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  {isAdmin && (
-                    <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
-                      Acciones
+          <>
+            <div className="overflow-x-auto rounded-lg border border-surface-800">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-surface-800 bg-surface-900/60">
+                    <th className="px-4 py-3 text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Producto
                     </th>
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={isAdmin ? 8 : 7}
-                      className="px-4 py-8 text-center text-surface-500"
-                    >
-                      No se encontraron productos
-                    </td>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Código
+                    </th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Categoría
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Costo
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Venta
+                    </th>
+                    <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Stock
+                    </th>
+                    <th className="px-4 py-3 text-center text-xs font-medium text-surface-400 uppercase tracking-wider">
+                      Estado
+                    </th>
+                    {isAdmin && (
+                      <th className="px-4 py-3 text-right text-xs font-medium text-surface-400 uppercase tracking-wider">
+                        Acciones
+                      </th>
+                    )}
                   </tr>
-                ) : (
-                  filtered.map((p) => (
-                    <tr
-                      key={p.id}
-                      className="border-b border-surface-800/60 hover:bg-surface-800/40 transition-colors"
-                    >
-                      <td className="px-4 py-3 text-surface-100 font-medium">
-                        {p.name}
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={isAdmin ? 8 : 7}
+                        className="px-4 py-8 text-center text-surface-500"
+                      >
+                        No se encontraron productos
                       </td>
-                      <td className="px-4 py-3 text-surface-400 font-mono text-xs">
-                        {getProductBarcodes(p).slice(0, 2).join(" · ") || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-surface-300">
-                        {p.category?.name || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right text-surface-400">
-                        {formatCurrency(p.cost_price)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-surface-100">
-                        {formatCurrency(p.sell_price)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <span
-                          className={
-                            p.stock_quantity <= p.min_stock_alert
-                              ? "text-red-400 font-semibold"
-                              : "text-surface-200"
-                          }
-                        >
-                          {p.stock_quantity}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <Badge variant={p.is_active ? "success" : "default"}>
-                          {p.is_active ? "Activo" : "Inactivo"}
-                        </Badge>
-                      </td>
-                      {isAdmin && (
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex gap-1 justify-end">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => openEdit(p)}
-                            >
-                              Editar
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => toggleActive(p.id, p.is_active)}
-                            >
-                              {p.is_active ? "Desactivar" : "Activar"}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-red-400 hover:text-red-300"
-                              onClick={() => setDeleteTarget(p)}
-                            >
-                              Eliminar
-                            </Button>
-                          </div>
-                        </td>
-                      )}
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    paginated.map((p) => (
+                      <tr
+                        key={p.id}
+                        className="border-b border-surface-800/60 hover:bg-surface-800/40 transition-colors"
+                      >
+                        <td className="px-4 py-3 text-surface-100 font-medium">
+                          {p.name}
+                        </td>
+                        <td className="px-4 py-3 text-surface-400 font-mono text-xs">
+                          {getProductBarcodes(p).slice(0, 2).join(" · ") || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-surface-300">
+                          {p.category?.name || "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right text-surface-400">
+                          {formatCurrency(p.cost_price)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-surface-100">
+                          {formatCurrency(p.sell_price)}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span
+                            className={
+                              p.stock_quantity <= p.min_stock_alert
+                                ? "text-red-400 font-semibold"
+                                : "text-surface-200"
+                            }
+                          >
+                            {p.stock_quantity}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Badge variant={p.is_active ? "success" : "default"}>
+                            {p.is_active ? "Activo" : "Inactivo"}
+                          </Badge>
+                        </td>
+                        {isAdmin && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex gap-1 justify-end">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => openEdit(p)}
+                              >
+                                Editar
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => toggleActive(p.id, p.is_active)}
+                              >
+                                {p.is_active ? "Desactivar" : "Activar"}
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="text-red-400 hover:text-red-300"
+                                onClick={() => setDeleteTarget(p)}
+                              >
+                                Eliminar
+                              </Button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between pt-4">
+                <span className="text-xs text-surface-500">
+                  Mostrando {(page - 1) * PAGE_SIZE + 1}–
+                  {Math.min(page * PAGE_SIZE, filtered.length)} de{" "}
+                  {filtered.length}
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={page <= 1}
+                    onClick={() => setPage((p) => p - 1)}
+                  >
+                    ← Anterior
+                  </Button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                    (n) => (
+                      <button
+                        key={n}
+                        onClick={() => setPage(n)}
+                        className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
+                          n === page
+                            ? "bg-amber-500 text-surface-950"
+                            : "text-surface-400 hover:bg-surface-800"
+                        }`}
+                      >
+                        {n}
+                      </button>
+                    ),
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={page >= totalPages}
+                    onClick={() => setPage((p) => p + 1)}
+                  >
+                    Siguiente →
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </Card>
 
@@ -287,8 +345,6 @@ export default function ProductsPage() {
           </div>
         </div>
       </Modal>
-
-      
     </div>
   );
 }

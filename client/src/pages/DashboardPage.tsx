@@ -57,16 +57,23 @@ export default function DashboardPage() {
           .toISOString()
           .slice(0, 10);
 
-        const [reportToday, reportWeek, products, credits] = await Promise.all([
-          api.get<ReportSummary>(
-            `/reports/sales-summary?from=${today}&to=${today}`,
-          ),
-          api.get<ReportSummary>(
-            `/reports/sales-summary?from=${sevenDaysAgo}&to=${today}`,
-          ),
-          api.get<ProductItem[]>("/products"),
-          api.get<CreditAccountItem[]>("/credits/accounts"),
-        ]);
+        const [reportToday, reportWeek, productsRes, credits] =
+          await Promise.all([
+            api.get<ReportSummary>(
+              `/reports/sales-summary?from=${today}&to=${today}`,
+            ),
+            api.get<ReportSummary>(
+              `/reports/sales-summary?from=${sevenDaysAgo}&to=${today}`,
+            ),
+            api.get<{ items: ProductItem[]; total: number } | ProductItem[]>(
+              "/products?limit=200",
+            ),
+            api.get<CreditAccountItem[]>("/credits/accounts"),
+          ]);
+
+        const products = Array.isArray(productsRes)
+          ? productsRes
+          : (productsRes?.items ?? []);
 
         const activeProducts = (products ?? []).filter(
           (p) => p.is_active,
