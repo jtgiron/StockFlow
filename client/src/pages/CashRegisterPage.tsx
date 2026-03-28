@@ -62,9 +62,17 @@ function CashRegisterContent() {
       accessor: (r: CashRegister) => formatDateTime(r.opened_at),
     },
     {
+      header: "Abrió",
+      accessor: (r: CashRegister) => r.opened_by_user?.full_name ?? "—",
+    },
+    {
       header: "Cierre",
       accessor: (r: CashRegister) =>
         r.closed_at ? formatDateTime(r.closed_at) : "—",
+    },
+    {
+      header: "Cerró",
+      accessor: (r: CashRegister) => r.closed_by_user?.full_name ?? "—",
     },
     {
       header: "Estado",

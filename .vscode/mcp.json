@@ -1,0 +1,9 @@
+{
+	"servers": {
+		"MercadoPago": {
+			"url": "https://mcp.mercadopago.com/mcp",
+			"type": "http"
+		}
+	},
+	"inputs": []
+}
