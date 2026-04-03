@@ -130,6 +130,7 @@ function POSContent() {
         size="lg"
       >
         <PaymentModal
+          cashRegisterId={cashRegister.id}
           creditAccounts={creditAccounts}
           onConfirm={handleConfirmSale}
           onClose={() => setPaymentOpen(false)}

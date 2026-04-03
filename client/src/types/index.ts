@@ -159,3 +159,20 @@ export interface PaymentEntry {
   method: PaymentMethod;
   amount: number;
 }
+
+export type MpOrderStatus = "pending" | "completed" | "cancelled" | "expired";
+
+export interface MpOrderResponse {
+  order_id: string;
+  external_reference: string;
+  status: string;
+  qr_data: string | null;
+}
+
+export interface MpOrderStatusResponse {
+  status: MpOrderStatus;
+  mp_order_id: string | null;
+  total_amount: number;
+  created_at: string;
+  updated_at: string;
+}

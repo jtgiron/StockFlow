@@ -24,6 +24,7 @@ import salesRouter from "./routes/sales.js";
 import creditsRouter from "./routes/credits.js";
 import reportsRouter from "./routes/reports.js";
 import priceListsRouter from "./routes/priceLists.js";
+import mercadopagoRouter from "./routes/mercadopago.js";
 
 const PORT = process.env.PORT ?? 3000;
 
@@ -93,6 +94,7 @@ app.use("/api/sales", salesRouter);
 app.use("/api/credits", creditsRouter);
 app.use("/api/reports", reportsRouter);
 app.use("/api/price-lists", priceListsRouter);
+app.use("/api/mp", mercadopagoRouter);
 
 // Global error handler
 app.use(errorHandler);
