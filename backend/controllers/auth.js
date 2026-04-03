@@ -13,6 +13,17 @@ import { hashLocalResetCode } from "../utils/localResetCodes.js";
 // Simple validators
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 8;
+const PASSWORD_COMPLEXITY_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+function validatePassword(password) {
+  if (!password || typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+    return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`;
+  }
+  if (!PASSWORD_COMPLEXITY_RE.test(password)) {
+    return "La contraseña debe incluir al menos una mayúscula, una minúscula y un número";
+  }
+  return null;
+}
 
 function normalizeEmail(email) {
   return typeof email === "string" ? email.trim().toLowerCase() : "";
@@ -26,15 +37,9 @@ export const register = async (req, res, next) => {
     if (!email || typeof email !== "string" || !EMAIL_RE.test(email.trim())) {
       throw new AppError(400, "Email inválido");
     }
-    if (
-      !password ||
-      typeof password !== "string" ||
-      password.length < MIN_PASSWORD_LENGTH
-    ) {
-      throw new AppError(
-        400,
-        `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
-      );
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      throw new AppError(400, passwordError);
     }
     if (
       !full_name ||
@@ -203,11 +208,9 @@ export const resetPasswordWithCode = async (req, res, next) => {
       throw new AppError(400, "El código de recuperación es obligatorio");
     }
 
-    if (newPassword.length < MIN_PASSWORD_LENGTH) {
-      throw new AppError(
-        400,
-        `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`,
-      );
+    const passwordError = validatePassword(newPassword);
+    if (passwordError) {
+      throw new AppError(400, passwordError);
     }
 
     const resetCodeHash = hashLocalResetCode(resetCode);

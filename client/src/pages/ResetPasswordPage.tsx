@@ -110,10 +110,10 @@ export default function ResetPasswordPage() {
             <Input
               label="Código de recuperación"
               type="text"
-              placeholder="000000"
+              placeholder="ABCD1234"
               value={resetCode}
               onChange={(event) =>
-                setResetCode(event.target.value.replace(/\D/g, "").slice(0, 6))
+                setResetCode(event.target.value.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 8))
               }
               required
             />

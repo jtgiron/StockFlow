@@ -8,6 +8,18 @@ import {
 } from "../utils/localResetCodes.js";
 
 const VALID_ROLES = new Set(["admin", "employee"]);
+const MIN_PASSWORD_LENGTH = 8;
+const PASSWORD_COMPLEXITY_RE = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).+$/;
+
+function validatePassword(password) {
+  if (!password || typeof password !== "string" || password.length < MIN_PASSWORD_LENGTH) {
+    return `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres`;
+  }
+  if (!PASSWORD_COMPLEXITY_RE.test(password)) {
+    return "La contraseña debe incluir al menos una mayúscula, una minúscula y un número";
+  }
+  return null;
+}
 
 function normalizeCreatePayload(body = {}) {
   const email =
@@ -47,10 +59,9 @@ export const createUser = async (req, res) => {
         .status(400)
         .json({ message: "email, password y fullName son obligatorios" });
     }
-    if (password.length < 6) {
-      return res
-        .status(400)
-        .json({ message: "La contrasena debe tener al menos 6 caracteres" });
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      return res.status(400).json({ message: passwordError });
     }
     if (!VALID_ROLES.has(role)) {
       return res.status(400).json({ message: "Rol invalido" });

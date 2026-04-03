@@ -1,3 +1,7 @@
 /backend/node_modules
 /backend/dist
 /client/node_modules
+
+# Environment files with secrets
+.env
+!.env.example

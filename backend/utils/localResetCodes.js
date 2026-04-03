@@ -3,8 +3,14 @@ import crypto from "node:crypto";
 const DEFAULT_LOCAL_RESET_TTL_MINUTES = 15;
 
 export function generateLocalResetCode() {
-  const num = crypto.randomInt(0, 1_000_000);
-  return String(num).padStart(6, "0");
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const length = 8;
+  const bytes = crypto.randomBytes(length);
+  let code = "";
+  for (let i = 0; i < length; i++) {
+    code += alphabet[bytes[i] % alphabet.length];
+  }
+  return code;
 }
 
 export function hashLocalResetCode(code) {
