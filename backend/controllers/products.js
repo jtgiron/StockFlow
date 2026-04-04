@@ -159,13 +159,52 @@ export const getAllProducts = async (req, res) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const search =
+      typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const onlyActive = String(req.query.only_active) === "true";
 
-    const countResult = await query("SELECT COUNT(*) FROM products");
+    const conditions = [];
+    const params = [];
+
+    if (onlyActive) {
+      conditions.push("is_active = true");
+    }
+
+    if (search) {
+      params.push(`%${search}%`);
+      const searchParam = `$${params.length}`;
+      conditions.push(
+        `(name ILIKE ${searchParam}
+          OR barcode ILIKE ${searchParam}
+          OR EXISTS (
+            SELECT 1
+            FROM unnest(COALESCE(barcodes, ARRAY[]::text[])) AS b(code)
+            WHERE b.code ILIKE ${searchParam}
+          ))`,
+      );
+    }
+
+    const whereClause = conditions.length
+      ? `WHERE ${conditions.join(" AND ")}`
+      : "";
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM products ${whereClause}`,
+      params,
+    );
     const total = parseInt(countResult.rows[0].count);
 
+    const pagingParams = [...params, limit, offset];
+    const limitParam = `$${pagingParams.length - 1}`;
+    const offsetParam = `$${pagingParams.length}`;
+
     const result = await query(
-      "SELECT * FROM products ORDER BY created_at DESC LIMIT $1 OFFSET $2",
-      [limit, offset],
+      `SELECT *
+         FROM products
+         ${whereClause}
+         ORDER BY created_at DESC
+         LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      pagingParams,
     );
 
     res.json({ items: result.rows, total, limit, offset });
@@ -408,14 +447,12 @@ export const bulkCreateProducts = async (req, res) => {
       return results;
     });
 
-    res
-      .status(201)
-      .json({
-        created: details.length,
-        failed: 0,
-        total: products.length,
-        details,
-      });
+    res.status(201).json({
+      created: details.length,
+      failed: 0,
+      total: products.length,
+      details,
+    });
   } catch (err) {
     res.status(400).json({ message: err.message });
   }

@@ -9,7 +9,6 @@ import { getProductBarcodes } from "../../utils/barcodes";
 export default function ProductSearch() {
   const { addItem } = useCart();
   const [query, setQuery] = useState("");
-  const [allProducts, setAllProducts] = useState<Product[]>([]);
   const [results, setResults] = useState<Product[]>([]);
   const [showResults, setShowResults] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -21,16 +20,6 @@ export default function ProductSearch() {
     return [];
   }
 
-  // Load all active products once
-  useEffect(() => {
-    api
-      .get<Product[] | { items: Product[] }>("/products?limit=200")
-      .then((data) =>
-        setAllProducts(extractProducts(data).filter((p) => p.is_active)),
-      )
-      .catch(() => setAllProducts([]));
-  }, []);
-
   useEffect(() => {
     if (!query || query.length < 2) {
       setResults([]);
@@ -41,19 +30,23 @@ export default function ProductSearch() {
     const timer = setTimeout(() => {
       const normalizedQuery = query.trim().toLowerCase();
 
-      const filtered = allProducts.filter((product) => {
-        if (product.name.toLowerCase().includes(normalizedQuery)) return true;
-        return getProductBarcodes(product).some((code) =>
-          code.toLowerCase().includes(normalizedQuery),
-        );
-      });
-
-      setResults(filtered.slice(0, 10));
-      setShowResults(true);
+      api
+        .get<Product[] | { items: Product[] }>(
+          `/products?search=${encodeURIComponent(normalizedQuery)}&only_active=true&limit=20`,
+        )
+        .then((data) => {
+          const serverResults = extractProducts(data);
+          setResults(serverResults.slice(0, 10));
+          setShowResults(true);
+        })
+        .catch(() => {
+          setResults([]);
+          setShowResults(true);
+        });
     }, 150);
 
     return () => clearTimeout(timer);
-  }, [query, allProducts]);
+  }, [query]);
 
   useEffect(() => {
     function handleClick(e: MouseEvent) {
