@@ -182,6 +182,7 @@ export interface MpMerchant {
   mp_user_id: number;
   merchant_name: string | null;
   mp_external_pos_id: string | null;
+  qr_image_url: string | null;
   is_active: boolean;
   token_valid: boolean;
   token_expires_at: string;

@@ -136,6 +136,34 @@ export default function SettingsPage() {
               </div>
             </div>
 
+            {/* QR Code */}
+            {activeMerchant.qr_image_url && (
+              <div className="p-4 bg-surface-800/50 border border-surface-700 rounded-lg">
+                <p className="text-sm text-surface-300 font-medium mb-3">Código QR de la caja</p>
+                <div className="flex items-start gap-4">
+                  <img
+                    src={activeMerchant.qr_image_url}
+                    alt="QR MercadoPago"
+                    className="w-48 h-48 rounded-lg bg-white p-2"
+                  />
+                  <div className="text-sm text-surface-400 space-y-2">
+                    <p>Imprimí este QR y colocalo en la caja para que los clientes lo escaneen.</p>
+                    <a
+                      href={activeMerchant.qr_image_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-amber-400 hover:text-amber-300 transition-colors"
+                    >
+                      Descargar QR
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 19.5l15-15m0 0H8.25m11.25 0v11.25" />
+                      </svg>
+                    </a>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Info box */}
             <div className="p-3 bg-sky-500/5 border border-sky-500/15 rounded-lg text-sm text-surface-400">
               Los pagos con QR se acreditarán directamente en la cuenta de MercadoPago conectada.

@@ -274,15 +274,17 @@ async function createStoreAndPos(accessToken, mpUserId, merchantId) {
     posData = await posRes.json();
   }
 
-  // 3. Save Store + POS IDs to our DB
+  // 3. Save Store + POS IDs + QR URL to our DB
+  const qrImageUrl = posData.qr?.image || null;
+
   await query(
     `UPDATE mp_merchants
-     SET mp_store_id = $1, mp_external_store_id = $2, mp_pos_id = $3, mp_external_pos_id = $4, updated_at = NOW()
-     WHERE id = $5`,
-    [String(storeData.id), externalStoreId, String(posData.id), externalPosId, merchantId],
+     SET mp_store_id = $1, mp_external_store_id = $2, mp_pos_id = $3, mp_external_pos_id = $4, qr_image_url = $5, updated_at = NOW()
+     WHERE id = $6`,
+    [String(storeData.id), externalStoreId, String(posData.id), externalPosId, qrImageUrl, merchantId],
   );
 
-  return { storeId: storeData.id, posId: posData.id, externalPosId, qr_url: posData.qr?.image };
+  return { storeId: storeData.id, posId: posData.id, externalPosId, qr_url: qrImageUrl };
 }
 
 /**
@@ -315,7 +317,7 @@ export const setupMerchantPos = async (req, res, next) => {
 export const listMerchants = async (req, res, next) => {
   try {
     const result = await query(
-      `SELECT id, mp_user_id, merchant_name, mp_external_pos_id, is_active, created_at, updated_at,
+      `SELECT id, mp_user_id, merchant_name, mp_external_pos_id, qr_image_url, is_active, created_at, updated_at,
               token_expires_at,
               CASE WHEN token_expires_at > NOW() THEN true ELSE false END AS token_valid
        FROM mp_merchants
