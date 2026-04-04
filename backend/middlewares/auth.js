@@ -1,6 +1,7 @@
 import { verifyToken } from "../utils/auth.js";
+import { query } from "../database.js";
 
-export const authenticate = (req, res, next) => {
+export const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
 
@@ -15,7 +16,27 @@ export const authenticate = (req, res, next) => {
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    req.user = decoded;
+    if (!decoded.id) {
+      return res.status(401).json({ message: "Invalid token payload" });
+    }
+
+    const result = await query(
+      "SELECT id, email, role, is_active FROM users WHERE id = $1 LIMIT 1",
+      [decoded.id],
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].is_active) {
+      return res
+        .status(401)
+        .json({ message: "Usuario no encontrado o desactivado" });
+    }
+
+    req.user = {
+      ...decoded,
+      id: result.rows[0].id,
+      email: result.rows[0].email,
+      role: result.rows[0].role,
+    };
     next();
   } catch (err) {
     console.error("Authentication error:", err);
@@ -25,11 +46,9 @@ export const authenticate = (req, res, next) => {
 
 export const authorizeAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
-    return res
-      .status(403)
-      .json({
-        message: "Acceso denegado: se requieren permisos de administrador",
-      });
+    return res.status(403).json({
+      message: "Acceso denegado: se requieren permisos de administrador",
+    });
   }
   next();
 };

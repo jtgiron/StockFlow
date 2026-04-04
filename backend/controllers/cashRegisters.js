@@ -36,8 +36,9 @@ export const getCurrent = async (req, res, next) => {
 
 export const openRegister = async (req, res, next) => {
   try {
-    const userId = req.user.id;
-    const { opening_cash_amount, openingcash_amount } = req.body;
+    const userId = req.user?.id;
+    const payload = req.body ?? {};
+    const { opening_cash_amount, openingcash_amount } = payload;
     const rawAmount = opening_cash_amount ?? openingcash_amount ?? 0;
     const amount = Number(rawAmount);
 
@@ -74,6 +75,15 @@ export const openRegister = async (req, res, next) => {
 
     res.status(201).json(mapRegister(result.rows[0]));
   } catch (err) {
+    console.error("openRegister error", {
+      code: err?.code,
+      message: err?.message,
+      detail: err?.detail,
+      hint: err?.hint,
+      userId: req.user?.id,
+      body: req.body,
+    });
+
     if (err.code === "23505") {
       return res.status(400).json({ message: "Ya tienes una caja abierta" });
     }
@@ -84,6 +94,9 @@ export const openRegister = async (req, res, next) => {
       return res
         .status(401)
         .json({ message: "Sesion invalida. Inicia sesion nuevamente" });
+    }
+    if (err.code === "42P01") {
+      return res.status(500).json({ message: "Falta la tabla cash_registers" });
     }
     next(err);
   }
