@@ -4,30 +4,27 @@ import crypto from "crypto";
 import { query } from "../database.js";
 import { withTransaction } from "../utils/db.js";
 import { AppError } from "../utils/errors.js";
+import { getActiveMerchant, getMerchantById } from "../utils/mpTokens.js";
 
 const MP_API_BASE = "https://api.mercadopago.com";
-
-function getMpConfig({ requireAll = true } = {}) {
-  const accessToken = process.env.MP_ACCESS_TOKEN;
-  const userId = process.env.MP_USER_ID;
-  const externalPosId = process.env.MP_EXTERNAL_POS_ID;
-  const webhookSecret = process.env.MP_WEBHOOK_SECRET;
-  const notificationUrl = process.env.MP_NOTIFICATION_URL;
-
-  if (requireAll && (!accessToken || !userId || !externalPosId)) {
-    throw new AppError(
-      500,
-      "Configuración de Mercado Pago incompleta. Revise las variables de entorno.",
-    );
-  }
-
-  return { accessToken, userId, externalPosId, webhookSecret, notificationUrl };
-}
 
 // POST /api/mp/create-order — Instore QR static model
 export const createOrder = async (req, res, next) => {
   try {
-    const { accessToken, userId: mpUserId, externalPosId, notificationUrl } = getMpConfig();
+    const merchant = await getActiveMerchant();
+    const accessToken = merchant.mp_access_token;
+    const mpUserId = merchant.mp_user_id;
+    const externalPosId = merchant.mp_external_pos_id;
+    const notificationUrl = process.env.MP_NOTIFICATION_URL;
+    const sponsorId = process.env.MP_SPONSOR_ID;
+
+    if (!externalPosId) {
+      throw new AppError(
+        400,
+        "La cuenta de MercadoPago no tiene una caja (POS) configurada. El administrador debe configurarla.",
+      );
+    }
+
     const userId = req.user.id;
     const { cash_register_id, items, total_amount } = req.body;
 
@@ -72,6 +69,11 @@ export const createOrder = async (req, res, next) => {
       cash_out: { amount: 0 },
     };
 
+    // sponsor_id identifies StockFlow as the integrator
+    if (sponsorId) {
+      mpPayload.sponsor = { id: Number(sponsorId) };
+    }
+
     // Add notification URL if configured
     if (notificationUrl) {
       mpPayload.notification_url = notificationUrl;
@@ -105,10 +107,10 @@ export const createOrder = async (req, res, next) => {
       );
     }
 
-    // Save pending order to DB
+    // Save pending order to DB (with merchant_id for webhook token resolution)
     await query(
-      `INSERT INTO mp_pending_orders (external_reference, mp_order_id, cash_register_id, user_id, items, total_amount, status)
-       VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
+      `INSERT INTO mp_pending_orders (external_reference, mp_order_id, cash_register_id, user_id, items, total_amount, status, merchant_id)
+       VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
       [
         externalReference,
         mpData.in_store_order_id || null,
@@ -116,6 +118,7 @@ export const createOrder = async (req, res, next) => {
         userId,
         JSON.stringify(items),
         amount,
+        merchant.id,
       ],
     );
 
@@ -133,7 +136,7 @@ export const createOrder = async (req, res, next) => {
 // POST /api/mp/webhook — public endpoint, handles IPN notifications
 export const webhook = async (req, res) => {
   try {
-    const { webhookSecret, accessToken } = getMpConfig({ requireAll: false });
+    const webhookSecret = process.env.MP_WEBHOOK_SECRET;
 
     // Validate HMAC signature if secret is configured
     if (webhookSecret) {
@@ -178,10 +181,11 @@ export const webhook = async (req, res) => {
     if (!topic || !resourceId) return;
 
     // QR static model sends "merchant_order" notifications
+    // Token is resolved per-order from mp_pending_orders.merchant_id
     if (topic === "merchant_order") {
-      await processMerchantOrder(resourceId, accessToken);
+      await processMerchantOrder(resourceId);
     } else if (topic === "payment") {
-      await processPaymentNotification(resourceId, accessToken);
+      await processPaymentNotification(resourceId);
     }
   } catch (err) {
     console.error("MP webhook processing error:", err);
@@ -193,11 +197,20 @@ export const webhook = async (req, res) => {
 
 /**
  * Process a merchant_order notification (QR static model).
- * Fetches the merchant order from MP API, checks if fully paid,
+ * Resolves the merchant's access token from the pending order,
+ * fetches the merchant order from MP API, checks if fully paid,
  * then creates the sale in our system.
  */
-async function processMerchantOrder(resourceUrl, accessToken) {
-  // resourceUrl can be a full URL or just an ID
+async function processMerchantOrder(resourceUrl) {
+  // We need an access token to fetch the merchant_order from MP.
+  // Try to get it from the active merchant first. If the resource contains
+  // an external_reference, we'll resolve per-order later.
+  const accessToken = await resolveWebhookToken();
+  if (!accessToken) {
+    console.error("MP webhook: no access token available to fetch merchant_order");
+    return;
+  }
+
   const url = resourceUrl.startsWith("http")
     ? resourceUrl
     : `${MP_API_BASE}/merchant_orders/${resourceUrl}`;
@@ -239,10 +252,29 @@ async function processMerchantOrder(resourceUrl, accessToken) {
 }
 
 /**
+ * Resolve an access token for webhook processing.
+ * Uses the active merchant's token.
+ */
+async function resolveWebhookToken() {
+  try {
+    const merchant = await getActiveMerchant();
+    return merchant.mp_access_token;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Process a payment notification (fallback).
  * Fetches payment details, then checks the merchant_order.
  */
-async function processPaymentNotification(paymentId, accessToken) {
+async function processPaymentNotification(paymentId) {
+  const accessToken = await resolveWebhookToken();
+  if (!accessToken) {
+    console.error("MP webhook: no access token available to fetch payment");
+    return;
+  }
+
   const url = `${MP_API_BASE}/v1/payments/${paymentId}`;
 
   const response = await fetch(url, {
@@ -405,15 +437,19 @@ async function updatePendingOrderStatus(externalRef, newStatus) {
 // DELETE /api/mp/cancel-order — remove pending order from POS QR
 export const cancelOrder = async (req, res, next) => {
   try {
-    const { accessToken, userId: mpUserId, externalPosId } = getMpConfig();
+    const merchant = await getActiveMerchant();
     const { externalReference } = req.params;
+
+    if (!merchant.mp_external_pos_id) {
+      throw new AppError(400, "No hay POS configurado para este comerciante");
+    }
 
     // Delete order from POS QR
     const mpResponse = await fetch(
-      `${MP_API_BASE}/instore/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/orders`,
+      `${MP_API_BASE}/instore/qr/seller/collectors/${merchant.mp_user_id}/pos/${merchant.mp_external_pos_id}/orders`,
       {
         method: "DELETE",
-        headers: { Authorization: `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${merchant.mp_access_token}` },
       },
     );
 

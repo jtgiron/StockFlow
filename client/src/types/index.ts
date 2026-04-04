@@ -176,3 +176,15 @@ export interface MpOrderStatusResponse {
   created_at: string;
   updated_at: string;
 }
+
+export interface MpMerchant {
+  id: number;
+  mp_user_id: number;
+  merchant_name: string | null;
+  mp_external_pos_id: string | null;
+  is_active: boolean;
+  token_valid: boolean;
+  token_expires_at: string;
+  created_at: string;
+  updated_at: string;
+}

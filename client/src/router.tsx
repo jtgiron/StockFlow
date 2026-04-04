@@ -14,6 +14,8 @@ import CreditsPage from "./pages/CreditsPage.tsx";
 import PriceListsPage from "./pages/PriceListsPage.tsx";
 import ReportsPage from "./pages/ReportsPage.tsx";
 import UsersPage from "./pages/UsersPage.tsx";
+import SettingsPage from "./pages/SettingsPage.tsx";
+import MpConnectedPage from "./pages/MpConnectedPage.tsx";
 
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -88,6 +90,15 @@ export default function Router() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute allowedRoles={["admin"]}>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="/mp-connected" element={<MpConnectedPage />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
