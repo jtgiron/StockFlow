@@ -229,18 +229,14 @@ async function createStoreAndPos(accessToken, mpUserId, merchantId) {
     storeData = await storeRes.json();
   }
 
-  // 2. Create POS (caja) linked to the store
+  // 2. Create POS (caja) linked to the store via numeric store_id
   const posPayload = {
     name: "Caja StockFlow",
     external_id: externalPosId,
-    external_store_id: externalStoreId,
+    store_id: storeData.id,
     fixed_amount: false,
     category: 621102, // Minimarket / Kiosco
   };
-
-  if (sponsorId) {
-    posPayload.store_id = storeData.id;
-  }
 
   const posRes = await fetch(
     `${MP_API_BASE}/pos`,
