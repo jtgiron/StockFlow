@@ -79,3 +79,14 @@ export async function getMpOrderStatus(
     return null;
   }
 }
+
+export async function cancelMpOrder(
+  externalReference: string,
+): Promise<boolean> {
+  try {
+    await api.delete(`/mp/cancel-order/${externalReference}`);
+    return true;
+  } catch {
+    return false;
+  }
+}

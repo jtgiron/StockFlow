@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
 import { useCart } from "../../contexts/CartContext";
 import { formatCurrency } from "../../utils/formatters";
-import { createMpOrder, getMpOrderStatus } from "../../hooks/useSales";
+import { createMpOrder, getMpOrderStatus, cancelMpOrder } from "../../hooks/useSales";
 import type { PaymentMethod, CreditAccount } from "../../types";
 import Button from "../ui/Button";
 import Input from "../ui/Input";
@@ -46,7 +46,7 @@ export default function PaymentModal({
 
   // MP QR waiting state
   const [mpWaiting, setMpWaiting] = useState(false);
-  const [, setMpExternalRef] = useState<string | null>(null);
+  const [mpExternalRef, setMpExternalRef] = useState<string | null>(null);
   const [mpError, setMpError] = useState<string | null>(null);
   const [mpElapsed, setMpElapsed] = useState(0);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -150,8 +150,12 @@ export default function PaymentModal({
     }
   }
 
-  function cancelMpWaiting(errorMsg?: string) {
+  async function cancelMpWaiting(errorMsg?: string) {
     stopPolling();
+    // Cancel the order on MP POS so QR stops showing it
+    if (mpExternalRef) {
+      await cancelMpOrder(mpExternalRef);
+    }
     setMpWaiting(false);
     setMpExternalRef(null);
     if (errorMsg) setMpError(errorMsg);

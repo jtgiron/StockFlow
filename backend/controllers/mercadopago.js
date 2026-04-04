@@ -7,26 +7,27 @@ import { AppError } from "../utils/errors.js";
 
 const MP_API_BASE = "https://api.mercadopago.com";
 
-function getMpConfig() {
+function getMpConfig({ requireAll = true } = {}) {
   const accessToken = process.env.MP_ACCESS_TOKEN;
   const userId = process.env.MP_USER_ID;
   const externalPosId = process.env.MP_EXTERNAL_POS_ID;
   const webhookSecret = process.env.MP_WEBHOOK_SECRET;
+  const notificationUrl = process.env.MP_NOTIFICATION_URL;
 
-  if (!accessToken || !userId || !externalPosId) {
+  if (requireAll && (!accessToken || !userId || !externalPosId)) {
     throw new AppError(
       500,
       "Configuración de Mercado Pago incompleta. Revise las variables de entorno.",
     );
   }
 
-  return { accessToken, userId, externalPosId, webhookSecret };
+  return { accessToken, userId, externalPosId, webhookSecret, notificationUrl };
 }
 
-// POST /api/mp/create-order
+// POST /api/mp/create-order — Instore QR static model
 export const createOrder = async (req, res, next) => {
   try {
-    const { accessToken, externalPosId } = getMpConfig();
+    const { accessToken, userId: mpUserId, externalPosId, notificationUrl } = getMpConfig();
     const userId = req.user.id;
     const { cash_register_id, items, total_amount } = req.body;
 
@@ -50,54 +51,57 @@ export const createOrder = async (req, res, next) => {
     }
 
     const externalReference = `SF-${Date.now()}-${uuidv4().slice(0, 8)}`;
-    const idempotencyKey = uuidv4();
-    const amount = Number(total_amount).toFixed(2);
+    const amount = Number(total_amount);
 
-    // Build MP order payload
+    // Build Instore QR order payload
+    // Docs: https://www.mercadopago.com.ar/developers/es/reference/instore_orders_v2/_instore_qr_seller_collectors_user_id_stores_external_store_id_pos_external_pos_id_orders/put
     const mpPayload = {
-      type: "qr",
-      total_amount: amount,
       external_reference: externalReference,
-      description: `Venta StockFlow`,
-      expiration_time: "PT15M",
-      config: {
-        qr: {
-          external_pos_id: externalPosId,
-          mode: "static",
-        },
-      },
-      transactions: {
-        payments: [{ amount }],
-      },
+      title: "Venta StockFlow",
+      description: `Venta de ${items.length} producto(s)`,
+      total_amount: amount,
       items: items.map((item) => ({
+        sku_number: String(item.product_id),
+        category: "marketplace",
         title: item.name || item.title || "Producto",
-        unit_price: Number(item.unit_price).toFixed(2),
+        unit_price: Number(item.unit_price),
         quantity: Number(item.quantity),
         unit_measure: "unit",
-        total_amount: (Number(item.unit_price) * Number(item.quantity)).toFixed(
-          2,
-        ),
+        total_amount: Number(item.unit_price) * Number(item.quantity),
       })),
+      cash_out: { amount: 0 },
     };
 
-    // Call MP API
-    const mpResponse = await fetch(`${MP_API_BASE}/v1/orders`, {
-      method: "POST",
+    // Add notification URL if configured
+    if (notificationUrl) {
+      mpPayload.notification_url = notificationUrl;
+    }
+
+    // PUT to Instore QR endpoint (creates/replaces order on the POS QR)
+    const mpUrl = `${MP_API_BASE}/instore/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/orders`;
+
+    const mpResponse = await fetch(mpUrl, {
+      method: "PUT",
       headers: {
         "Content-Type": "application/json",
         Authorization: `Bearer ${accessToken}`,
-        "X-Idempotency-Key": idempotencyKey,
       },
       body: JSON.stringify(mpPayload),
     });
 
-    const mpData = await mpResponse.json();
+    const mpText = await mpResponse.text();
+    let mpData;
+    try {
+      mpData = mpText ? JSON.parse(mpText) : {};
+    } catch {
+      mpData = {};
+    }
 
     if (!mpResponse.ok) {
-      console.error("MP create order error:", mpData);
+      console.error("MP create order error:", mpResponse.status, mpText);
       throw new AppError(
         mpResponse.status === 400 ? 400 : 502,
-        `Error de Mercado Pago: ${mpData.message || mpData.error || "Error desconocido"}`,
+        `Error de Mercado Pago: ${mpData.message || mpData.error || `HTTP ${mpResponse.status}`}`,
       );
     }
 
@@ -107,7 +111,7 @@ export const createOrder = async (req, res, next) => {
        VALUES ($1, $2, $3, $4, $5, $6, 'pending')`,
       [
         externalReference,
-        mpData.id || null,
+        mpData.in_store_order_id || null,
         cash_register_id,
         userId,
         JSON.stringify(items),
@@ -116,88 +120,161 @@ export const createOrder = async (req, res, next) => {
     );
 
     res.status(201).json({
-      order_id: mpData.id,
+      order_id: mpData.in_store_order_id || null,
       external_reference: externalReference,
-      status: mpData.status || "created",
-      qr_data: mpData.type_response?.qr_data || null,
+      status: "pending",
+      qr_data: null, // QR estático — el QR físico ya está en la caja
     });
   } catch (err) {
     next(err);
   }
 };
 
-// POST /api/mp/webhook — public endpoint, validates HMAC
-export const webhook = async (req, res, next) => {
+// POST /api/mp/webhook — public endpoint, handles IPN notifications
+export const webhook = async (req, res) => {
   try {
-    const { webhookSecret } = getMpConfig();
+    const { webhookSecret, accessToken } = getMpConfig({ requireAll: false });
 
     // Validate HMAC signature if secret is configured
     if (webhookSecret) {
       const xSignature = req.headers["x-signature"];
       const xRequestId = req.headers["x-request-id"];
 
-      if (!xSignature) {
-        console.warn("MP webhook: missing x-signature header");
-        return res.status(401).json({ message: "Missing signature" });
-      }
+      if (xSignature) {
+        const parts = xSignature.split(",");
+        let ts = null;
+        let hash = null;
+        for (const part of parts) {
+          const [key, value] = part.split("=", 2).map((s) => s.trim());
+          if (key === "ts") ts = value;
+          if (key === "v1") hash = value;
+        }
 
-      // Parse ts and v1 from x-signature
-      const parts = xSignature.split(",");
-      let ts = null;
-      let hash = null;
-      for (const part of parts) {
-        const [key, value] = part.split("=", 2).map((s) => s.trim());
-        if (key === "ts") ts = value;
-        if (key === "v1") hash = value;
-      }
+        if (ts && hash) {
+          const dataId = (req.query["data.id"] || req.query["id"] || "").toString();
+          const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+          const expectedHash = crypto
+            .createHmac("sha256", webhookSecret)
+            .update(manifest)
+            .digest("hex");
 
-      if (!ts || !hash) {
-        console.warn("MP webhook: invalid x-signature format");
-        return res.status(401).json({ message: "Invalid signature format" });
-      }
-
-      // Build manifest: data.id from query params (lowercase), request-id, ts
-      const dataId = (req.query["data.id"] || "").toString().toLowerCase();
-      const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
-      const expectedHash = crypto
-        .createHmac("sha256", webhookSecret)
-        .update(manifest)
-        .digest("hex");
-
-      if (expectedHash !== hash) {
-        console.warn("MP webhook: HMAC mismatch");
-        return res.status(401).json({ message: "Invalid signature" });
+          if (expectedHash !== hash) {
+            console.warn("MP webhook: HMAC mismatch");
+            return res.status(401).json({ message: "Invalid signature" });
+          }
+        }
       }
     }
 
-    // Respond 200 immediately (MP requires response within 22s)
+    // Respond 200 immediately (MP requires fast response)
     res.status(200).json({ received: true });
 
-    // Process asynchronously
-    const { action, data } = req.body;
-    if (!action || !data) return;
+    // Determine notification type
+    const topic = req.body.topic || req.query.topic || req.body.type;
+    const resourceId = req.body.resource || req.query["data.id"] || req.body.data?.id;
 
-    console.log(`MP webhook: action=${action}, data.id=${data.id}`);
+    console.log(`MP webhook: topic=${topic}, resource=${resourceId}, body=${JSON.stringify(req.body).substring(0, 200)}`);
 
-    if (action === "order.processed") {
-      await processApprovedOrder(data);
-    } else if (action === "order.canceled" || action === "order.expired") {
-      const newStatus = action === "order.canceled" ? "cancelled" : "expired";
-      await updatePendingOrderStatus(data.external_reference, newStatus);
+    if (!topic || !resourceId) return;
+
+    // QR static model sends "merchant_order" notifications
+    if (topic === "merchant_order") {
+      await processMerchantOrder(resourceId, accessToken);
+    } else if (topic === "payment") {
+      await processPaymentNotification(resourceId, accessToken);
     }
   } catch (err) {
-    // Don't propagate errors after response is sent
     console.error("MP webhook processing error:", err);
+    if (!res.headersSent) {
+      res.status(500).json({ message: "Webhook processing error" });
+    }
   }
 };
 
-async function processApprovedOrder(data) {
-  const externalRef = data.external_reference;
-  if (!externalRef) {
-    console.error("MP webhook: missing external_reference in data");
+/**
+ * Process a merchant_order notification (QR static model).
+ * Fetches the merchant order from MP API, checks if fully paid,
+ * then creates the sale in our system.
+ */
+async function processMerchantOrder(resourceUrl, accessToken) {
+  // resourceUrl can be a full URL or just an ID
+  const url = resourceUrl.startsWith("http")
+    ? resourceUrl
+    : `${MP_API_BASE}/merchant_orders/${resourceUrl}`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    console.error(`MP webhook: failed to fetch merchant_order: ${response.status}`);
     return;
   }
 
+  const order = await response.json();
+  const externalRef = order.external_reference;
+
+  if (!externalRef) {
+    console.warn("MP webhook: merchant_order missing external_reference");
+    return;
+  }
+
+  // Check if all payments are approved and cover the total
+  const paidAmount = (order.payments || [])
+    .filter((p) => p.status === "approved")
+    .reduce((sum, p) => sum + p.transaction_amount, 0);
+
+  if (paidAmount < order.total_amount) {
+    console.log(`MP webhook: merchant_order ${order.id} not fully paid yet (${paidAmount}/${order.total_amount})`);
+    return;
+  }
+
+  // Get the payment ID for reference
+  const approvedPayment = (order.payments || []).find((p) => p.status === "approved");
+  const mpPaymentId = approvedPayment ? String(approvedPayment.id) : null;
+
+  console.log(`MP webhook: merchant_order ${order.id} fully paid, ref=${externalRef}, payment=${mpPaymentId}`);
+
+  await createSaleFromPendingOrder(externalRef, mpPaymentId);
+}
+
+/**
+ * Process a payment notification (fallback).
+ * Fetches payment details, then checks the merchant_order.
+ */
+async function processPaymentNotification(paymentId, accessToken) {
+  const url = `${MP_API_BASE}/v1/payments/${paymentId}`;
+
+  const response = await fetch(url, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+
+  if (!response.ok) {
+    console.error(`MP webhook: failed to fetch payment ${paymentId}: ${response.status}`);
+    return;
+  }
+
+  const payment = await response.json();
+
+  if (payment.status !== "approved") {
+    console.log(`MP webhook: payment ${paymentId} status=${payment.status}, ignoring`);
+    return;
+  }
+
+  const externalRef = payment.external_reference;
+  if (!externalRef) {
+    console.warn(`MP webhook: payment ${paymentId} has no external_reference`);
+    return;
+  }
+
+  console.log(`MP webhook: payment ${paymentId} approved, ref=${externalRef}`);
+  await createSaleFromPendingOrder(externalRef, String(paymentId));
+}
+
+/**
+ * Atomically claim a pending order and create the sale + stock movements.
+ */
+async function createSaleFromPendingOrder(externalRef, mpPaymentId) {
   // Atomically claim the pending order (prevents double processing)
   const claimResult = await query(
     `UPDATE mp_pending_orders
@@ -215,29 +292,10 @@ async function processApprovedOrder(data) {
   }
 
   const pendingOrder = claimResult.rows[0];
-  const items = pendingOrder.items; // JSONB, already parsed
-  const mpPaymentId =
-    data.transactions?.payments?.[0]?.reference?.id ||
-    data.transactions?.payments?.[0]?.id ||
-    data.id ||
-    null;
+  const items = pendingOrder.items;
 
   try {
     await withTransaction(async (txQuery) => {
-      // Verify cash register is still open
-      const regCheck = await txQuery(
-        "SELECT id, status FROM cash_registers WHERE id = $1",
-        [pendingOrder.cash_register_id],
-      );
-      if (regCheck.rows.length === 0 || regCheck.rows[0].status !== "open") {
-        console.error(
-          `MP webhook: cash register ${pendingOrder.cash_register_id} not open for ref=${externalRef}`,
-        );
-        // Still mark as completed since MP already charged the customer
-        // The sale will be created with the register ID regardless
-      }
-
-      // Calculate total and validate items
       let totalAmount = 0;
       const itemsData = [];
 
@@ -268,7 +326,6 @@ async function processApprovedOrder(data) {
           quantity: qty,
           unitPrice,
           subtotal,
-          productName: product.name,
         });
       }
 
@@ -344,6 +401,36 @@ async function updatePendingOrderStatus(externalRef, newStatus) {
     console.log(`MP webhook: order ref=${externalRef} marked as ${newStatus}`);
   }
 }
+
+// DELETE /api/mp/cancel-order — remove pending order from POS QR
+export const cancelOrder = async (req, res, next) => {
+  try {
+    const { accessToken, userId: mpUserId, externalPosId } = getMpConfig();
+    const { externalReference } = req.params;
+
+    // Delete order from POS QR
+    const mpResponse = await fetch(
+      `${MP_API_BASE}/instore/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/orders`,
+      {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${accessToken}` },
+      },
+    );
+
+    if (!mpResponse.ok && mpResponse.status !== 404) {
+      console.error("MP cancel order error:", mpResponse.status);
+    }
+
+    // Mark as cancelled in DB
+    if (externalReference) {
+      await updatePendingOrderStatus(externalReference, "cancelled");
+    }
+
+    res.json({ message: "Orden cancelada" });
+  } catch (err) {
+    next(err);
+  }
+};
 
 // GET /api/mp/order-status/:externalReference
 export const getOrderStatus = async (req, res, next) => {
