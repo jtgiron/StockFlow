@@ -38,7 +38,7 @@ export const createCategory = async (req, res, next) => {
     res.status(201).json(result.rows[0]);
   } catch (err) {
     if (err.code === "23505") {
-      return res.status(409).json({ message: "La categoría ya existe" });
+      return next(new AppError(409, "La categoría ya existe"));
     }
     next(err);
   }
@@ -64,7 +64,7 @@ export const updateCategory = async (req, res, next) => {
     res.json(result.rows[0]);
   } catch (err) {
     if (err.code === "23505") {
-      return res.status(409).json({ message: "La categoría ya existe" });
+      return next(new AppError(409, "La categoría ya existe"));
     }
     next(err);
   }

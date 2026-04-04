@@ -1,5 +1,6 @@
 import { query } from "../database.js";
 import { hashPassword } from "../utils/auth.js";
+import { AppError } from "../utils/errors.js";
 import {
   generateLocalResetCode,
   getLocalResetCodeExpiryDate,
@@ -36,42 +37,39 @@ function normalizeCreatePayload(body = {}) {
   return { email, password, fullName, role };
 }
 
-export const listUsers = async (req, res) => {
+export const listUsers = async (req, res, next) => {
   try {
     const result = await query(
       "SELECT id, email, full_name, role, is_active, created_at, updated_at FROM users WHERE is_active = true ORDER BY created_at DESC",
     );
     res.json(result.rows);
   } catch (err) {
-    console.error("List users error:", err);
-    res.status(500).json({ message: "Error interno del servidor" });
+    next(err);
   }
 };
 
-export const createUser = async (req, res) => {
+export const createUser = async (req, res, next) => {
   try {
     const { email, password, fullName, role } = normalizeCreatePayload(
       req.body,
     );
 
     if (!email || !password || !fullName) {
-      return res
-        .status(400)
-        .json({ message: "email, password y fullName son obligatorios" });
+      throw new AppError(400, "email, password y fullName son obligatorios");
     }
     const passwordError = validatePassword(password);
     if (passwordError) {
-      return res.status(400).json({ message: passwordError });
+      throw new AppError(400, passwordError);
     }
     if (!VALID_ROLES.has(role)) {
-      return res.status(400).json({ message: "Rol invalido" });
+      throw new AppError(400, "Rol invalido");
     }
 
     const existing = await query("SELECT id FROM users WHERE email = $1", [
       email,
     ]);
     if (existing.rows.length > 0) {
-      return res.status(409).json({ message: "El email ya esta registrado" });
+      throw new AppError(409, "El email ya esta registrado");
     }
 
     const passwordHash = await hashPassword(password);
@@ -82,12 +80,11 @@ export const createUser = async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    console.error("Create user error:", err);
-    res.status(500).json({ message: "Error interno del servidor" });
+    next(err);
   }
 };
 
-export const updateUserRole = async (req, res) => {
+export const updateUserRole = async (req, res, next) => {
   try {
     const { id } = req.params;
     const role =
@@ -96,7 +93,7 @@ export const updateUserRole = async (req, res) => {
         : "";
 
     if (!VALID_ROLES.has(role)) {
-      return res.status(400).json({ message: "Rol invalido" });
+      throw new AppError(400, "Rol invalido");
     }
 
     const result = await query(
@@ -105,24 +102,21 @@ export const updateUserRole = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
+      throw new AppError(404, "Usuario no encontrado");
     }
 
     res.json(result.rows[0]);
   } catch (err) {
-    console.error("Update user role error:", err);
-    res.status(500).json({ message: "Error interno del servidor" });
+    next(err);
   }
 };
 
-export const deleteUser = async (req, res) => {
+export const deleteUser = async (req, res, next) => {
   try {
     const { id } = req.params;
 
     if (req.user.id === id) {
-      return res
-        .status(400)
-        .json({ message: "No puedes eliminar tu propio usuario" });
+      throw new AppError(400, "No puedes eliminar tu propio usuario");
     }
 
     const result = await query(
@@ -131,17 +125,16 @@ export const deleteUser = async (req, res) => {
     );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
+      throw new AppError(404, "Usuario no encontrado");
     }
 
     res.status(204).send();
   } catch (err) {
-    console.error("Delete user error:", err);
-    res.status(500).json({ message: "Error interno del servidor" });
+    next(err);
   }
 };
 
-export const generatePasswordResetCode = async (req, res) => {
+export const generatePasswordResetCode = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -151,7 +144,7 @@ export const generatePasswordResetCode = async (req, res) => {
     );
 
     if (userResult.rows.length === 0) {
-      return res.status(404).json({ message: "Usuario no encontrado" });
+      throw new AppError(404, "Usuario no encontrado");
     }
 
     const resetCode = generateLocalResetCode();
@@ -180,7 +173,6 @@ export const generatePasswordResetCode = async (req, res) => {
       },
     });
   } catch (err) {
-    console.error("Generate reset code error:", err);
-    res.status(500).json({ message: "Error interno del servidor" });
+    next(err);
   }
 };

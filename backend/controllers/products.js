@@ -1,5 +1,6 @@
 // backend/controllers/products.js
 import { query } from "../database.js";
+import { AppError } from "../utils/errors.js";
 
 const PRODUCT_UPDATE_FIELDS = {
   barcode: "barcode",
@@ -155,7 +156,7 @@ function normalizeProductCreate(body) {
   return { data: normalized };
 }
 
-export const getAllProducts = async (req, res) => {
+export const getAllProducts = async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
@@ -209,28 +210,28 @@ export const getAllProducts = async (req, res) => {
 
     res.json({ items: result.rows, total, limit, offset });
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
-export const getProductById = async (req, res) => {
+export const getProductById = async (req, res, next) => {
   const { id } = req.params;
   try {
     const result = await query("SELECT * FROM products WHERE id = $1", [id]);
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Product not found" });
+      throw new AppError(404, "Producto no encontrado");
     }
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
-export const createProduct = async (req, res) => {
+export const createProduct = async (req, res, next) => {
   const { data, error } = normalizeProductCreate(req.body);
 
   if (error) {
-    return res.status(400).json({ message: error });
+    return next(new AppError(400, error));
   }
 
   try {
@@ -266,30 +267,28 @@ export const createProduct = async (req, res) => {
 
     res.status(201).json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
-export const updateProduct = async (req, res) => {
+export const updateProduct = async (req, res, next) => {
   const { id } = req.params;
   const productId = Number(id);
 
   if (!Number.isInteger(productId) || productId < 1) {
-    return res.status(400).json({ message: "ID de producto invalido" });
+    return next(new AppError(400, "ID de producto invalido"));
   }
 
   const { data, error } = normalizeProductUpdate(req.body);
 
   if (error) {
-    return res.status(400).json({ message: error });
+    return next(new AppError(400, error));
   }
 
   const fieldsToUpdate = Object.entries(data);
 
   if (fieldsToUpdate.length === 0) {
-    return res
-      .status(400)
-      .json({ message: "No se enviaron campos para actualizar" });
+    return next(new AppError(400, "No se enviaron campos para actualizar"));
   }
 
   try {
@@ -309,12 +308,12 @@ export const updateProduct = async (req, res) => {
 
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
 // Search product by barcode (primary or in barcodes array)
-export const getProductByBarcode = async (req, res) => {
+export const getProductByBarcode = async (req, res, next) => {
   const { barcode } = req.params;
   try {
     const result = await query(
@@ -325,16 +324,16 @@ export const getProductByBarcode = async (req, res) => {
       [barcode.trim()],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+      throw new AppError(404, "Producto no encontrado");
     }
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
 // Toggle active/inactive
-export const toggleProductActive = async (req, res) => {
+export const toggleProductActive = async (req, res, next) => {
   const { id } = req.params;
   try {
     const result = await query(
@@ -343,16 +342,16 @@ export const toggleProductActive = async (req, res) => {
       [id],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+      throw new AppError(404, "Producto no encontrado");
     }
     res.json(result.rows[0]);
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
 // Soft delete (set inactive) or hard delete if no references
-export const deleteProduct = async (req, res) => {
+export const deleteProduct = async (req, res, next) => {
   const { id } = req.params;
   try {
     // Check for related sale_items or stock_movements
@@ -371,7 +370,7 @@ export const deleteProduct = async (req, res) => {
         [id],
       );
       if (result.rows.length === 0) {
-        return res.status(404).json({ message: "Producto no encontrado" });
+        throw new AppError(404, "Producto no encontrado");
       }
       return res.status(204).send();
     }
@@ -382,22 +381,20 @@ export const deleteProduct = async (req, res) => {
       [id],
     );
     if (result.rows.length === 0) {
-      return res.status(404).json({ message: "Producto no encontrado" });
+      throw new AppError(404, "Producto no encontrado");
     }
     res.status(204).send();
   } catch (err) {
-    res.status(500).json({ message: err.message });
+    next(err);
   }
 };
 
 // Bulk create products (transactional)
-export const bulkCreateProducts = async (req, res) => {
+export const bulkCreateProducts = async (req, res, next) => {
   const { products } = req.body;
 
   if (!Array.isArray(products) || products.length === 0) {
-    return res
-      .status(400)
-      .json({ message: "Se requiere un array de productos" });
+    return next(new AppError(400, "Se requiere un array de productos"));
   }
 
   try {
@@ -454,6 +451,6 @@ export const bulkCreateProducts = async (req, res) => {
       details,
     });
   } catch (err) {
-    res.status(400).json({ message: err.message });
+    next(err);
   }
 };

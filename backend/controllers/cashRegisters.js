@@ -108,10 +108,7 @@ export const openRegister = async (req, res, next) => {
   try {
     const columns = await getCashRegisterColumns();
     const userId = req.user?.id;
-    const payload = req.body ?? {};
-    const { opening_cash_amount, openingcash_amount } = payload;
-    const rawAmount = opening_cash_amount ?? openingcash_amount ?? 0;
-    const amount = Number(rawAmount);
+    const amount = req.body.opening_cash_amount;
 
     if (
       !userId ||
@@ -119,14 +116,6 @@ export const openRegister = async (req, res, next) => {
       !UUID_V4_OR_V1_REGEX.test(userId)
     ) {
       throw new AppError(401, "Sesion invalida. Inicia sesion nuevamente");
-    }
-
-    if (!Number.isFinite(amount)) {
-      throw new AppError(400, "El monto inicial debe ser numerico");
-    }
-
-    if (amount < 0) {
-      throw new AppError(400, "El monto inicial no puede ser negativo");
     }
 
     // Check if user already has an open register
@@ -156,18 +145,16 @@ export const openRegister = async (req, res, next) => {
     });
 
     if (err.code === "23505") {
-      return res.status(400).json({ message: "Ya tienes una caja abierta" });
+      return next(new AppError(400, "Ya tienes una caja abierta"));
     }
     if (err.code === "22P02") {
-      return res.status(400).json({ message: "El monto inicial es invalido" });
+      return next(new AppError(400, "El monto inicial es invalido"));
     }
     if (err.code === "23503") {
-      return res
-        .status(401)
-        .json({ message: "Sesion invalida. Inicia sesion nuevamente" });
+      return next(new AppError(401, "Sesion invalida. Inicia sesion nuevamente"));
     }
     if (err.code === "42P01") {
-      return res.status(500).json({ message: "Falta la tabla cash_registers" });
+      return next(new AppError(500, "Falta la tabla cash_registers"));
     }
     next(err);
   }
@@ -178,18 +165,10 @@ export const closeRegister = async (req, res, next) => {
     const columns = await getCashRegisterColumns();
     const { id } = req.params;
     const userId = req.user.id;
-    const {
-      closing_cash_amount,
-      closingcash_amount,
-      closing_qr_amount,
-      closingqr_amount,
-      notes,
-    } = req.body;
+    const { closing_cash_amount, closing_qr_amount, notes } = req.body;
 
-    const cashAmount = parseFloat(
-      closing_cash_amount ?? closingcash_amount ?? 0,
-    );
-    const qrAmount = parseFloat(closing_qr_amount ?? closingqr_amount ?? 0);
+    const cashAmount = closing_cash_amount;
+    const qrAmount = closing_qr_amount;
 
     // Verify register belongs to user and is open
     const regResult = await query(

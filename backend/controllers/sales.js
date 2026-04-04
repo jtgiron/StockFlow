@@ -8,17 +8,6 @@ export const createSale = async (req, res, next) => {
     const userId = req.user.id;
     const { cash_register_id, items, payments, credit_account_id } = req.body;
 
-    // Validations
-    if (!cash_register_id) {
-      throw new AppError(400, "cash_register_id es obligatorio");
-    }
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      throw new AppError(400, "Se requiere al menos un item");
-    }
-    if (!payments || !Array.isArray(payments) || payments.length === 0) {
-      throw new AppError(400, "Se requiere al menos un pago");
-    }
-
     const result = await withTransaction(async (txQuery) => {
       // Verify cash register is open
       const regCheck = await txQuery(

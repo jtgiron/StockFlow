@@ -19,13 +19,10 @@ export const getLists = async (req, res, next) => {
 export const createList = async (req, res, next) => {
   try {
     const { name } = req.body;
-    if (!name || typeof name !== "string" || !name.trim()) {
-      throw new AppError(400, "El nombre es obligatorio");
-    }
 
     const result = await query(
       "INSERT INTO price_lists (name) VALUES ($1) RETURNING *",
-      [name.trim()],
+      [name],
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -38,13 +35,9 @@ export const updateList = async (req, res, next) => {
     const { id } = req.params;
     const { name } = req.body;
 
-    if (!name || typeof name !== "string" || !name.trim()) {
-      throw new AppError(400, "El nombre es obligatorio");
-    }
-
     const result = await query(
       "UPDATE price_lists SET name = $1 WHERE id = $2 AND status = 'draft' RETURNING *",
-      [name.trim(), id],
+      [name, id],
     );
 
     if (result.rows.length === 0) {
@@ -95,10 +88,6 @@ export const addItem = async (req, res, next) => {
   try {
     const { listId } = req.params;
     const { product_id, new_price } = req.body;
-
-    if (!product_id || new_price == null) {
-      throw new AppError(400, "product_id y new_price son obligatorios");
-    }
 
     // Get current price
     const product = await query(

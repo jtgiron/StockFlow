@@ -8,7 +8,7 @@ import { createSale } from "../hooks/useSales";
 import type { CashRegister, CreditAccount, Product } from "../types";
 import ProductSearch from "../components/pos/ProductSearch";
 import Cart from "../components/pos/Cart";
-import PaymentModal from "../components/pos/PaymendModal";
+import PaymentModal from "../components/pos/PaymentModal";
 import Modal from "../components/ui/Modal";
 import Alert from "../components/ui/Alert";
 import toast from "react-hot-toast";

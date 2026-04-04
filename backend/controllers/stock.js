@@ -35,25 +35,7 @@ export const createMovement = async (req, res, next) => {
   try {
     const { product_id, movement_type, quantity, reason } = req.body;
     const userId = req.user.id;
-
-    if (!product_id || !movement_type || quantity == null) {
-      throw new AppError(
-        400,
-        "product_id, movement_type y quantity son obligatorios",
-      );
-    }
-
-    if (!VALID_MOVEMENT_TYPES.has(movement_type)) {
-      throw new AppError(
-        400,
-        "movement_type debe ser entry, exit o adjustment",
-      );
-    }
-
-    const qty = parseInt(quantity);
-    if (!Number.isInteger(qty) || qty <= 0) {
-      throw new AppError(400, "quantity debe ser un entero positivo");
-    }
+    const qty = quantity;
 
     const result = await withTransaction(async (txQuery) => {
       // Verify product exists

@@ -19,18 +19,11 @@ export const getAccounts = async (req, res, next) => {
 export const createAccount = async (req, res, next) => {
   try {
     const { customer_name, phone } = req.body;
-    if (
-      !customer_name ||
-      typeof customer_name !== "string" ||
-      !customer_name.trim()
-    ) {
-      throw new AppError(400, "customer_name es obligatorio");
-    }
 
     const result = await query(
       `INSERT INTO credit_accounts (customer_name, phone)
        VALUES ($1, $2) RETURNING *`,
-      [customer_name.trim(), phone || null],
+      [customer_name, phone || null],
     );
     res.status(201).json(result.rows[0]);
   } catch (err) {
@@ -48,15 +41,8 @@ export const updateAccount = async (req, res, next) => {
     let idx = 1;
 
     if (customer_name !== undefined) {
-      if (
-        !customer_name ||
-        typeof customer_name !== "string" ||
-        !customer_name.trim()
-      ) {
-        throw new AppError(400, "customer_name no puede estar vacío");
-      }
       fields.push(`customer_name = $${idx++}`);
-      values.push(customer_name.trim());
+      values.push(customer_name);
     }
 
     if (phone !== undefined) {
@@ -141,12 +127,6 @@ export const addPayment = async (req, res, next) => {
     const userId = req.user.id;
     const { amount, notes } = req.body;
 
-    if (!amount || parseFloat(amount) <= 0) {
-      throw new AppError(400, "El monto debe ser mayor a 0");
-    }
-
-    const parsedAmount = parseFloat(amount);
-
     const result = await withTransaction(async (txQuery) => {
       // Verify account exists and is active
       const account = await txQuery(
@@ -164,13 +144,13 @@ export const addPayment = async (req, res, next) => {
       const tx = await txQuery(
         `INSERT INTO credit_transactions (credit_account_id, amount, type, notes, user_id)
          VALUES ($1, $2, 'payment', $3, $4) RETURNING *`,
-        [accountId, parsedAmount, notes || "Pago de deuda", userId],
+        [accountId, amount, notes || "Pago de deuda", userId],
       );
 
       // Update balance
       await txQuery(
         "UPDATE credit_accounts SET balance = balance - $1, updated_at = NOW() WHERE id = $2",
-        [parsedAmount, accountId],
+        [amount, accountId],
       );
 
       return tx.rows[0];
