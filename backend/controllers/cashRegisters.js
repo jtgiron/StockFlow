@@ -5,6 +5,76 @@ import { AppError } from "../utils/errors.js";
 const UUID_V4_OR_V1_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
+const CASH_REGISTER_COLUMN_CANDIDATES = {
+  opening: ["opening_cash_amount", "openingcash_amount"],
+  closingCash: ["closing_cash_amount", "closingcash_amount"],
+  closingQr: ["closing_qr_amount", "closingqr_amount"],
+  expectedCash: ["expected_cash_amount", "expectedcash_amount"],
+  expectedQr: ["expected_qr_amount", "expectedqr_amount"],
+};
+
+let cachedCashRegisterColumns = null;
+
+async function getCashRegisterColumns() {
+  if (cachedCashRegisterColumns) return cachedCashRegisterColumns;
+
+  const allCandidates = Object.values(CASH_REGISTER_COLUMN_CANDIDATES).flat();
+  const placeholders = allCandidates.map((_, idx) => `$${idx + 1}`).join(", ");
+  const result = await query(
+    `SELECT column_name
+       FROM information_schema.columns
+      WHERE table_schema = 'public'
+        AND table_name = 'cash_registers'
+        AND column_name IN (${placeholders})`,
+    allCandidates,
+  );
+
+  const existing = new Set(result.rows.map((r) => r.column_name));
+  const pick = (options, label) => {
+    const found = options.find((col) => existing.has(col));
+    if (!found) {
+      throw new AppError(
+        500,
+        `Esquema incompatible en cash_registers: falta columna ${label}`,
+      );
+    }
+    return found;
+  };
+
+  cachedCashRegisterColumns = {
+    opening: pick(CASH_REGISTER_COLUMN_CANDIDATES.opening, "opening amount"),
+    closingCash: pick(
+      CASH_REGISTER_COLUMN_CANDIDATES.closingCash,
+      "closing cash amount",
+    ),
+    closingQr: pick(
+      CASH_REGISTER_COLUMN_CANDIDATES.closingQr,
+      "closing qr amount",
+    ),
+    expectedCash: pick(
+      CASH_REGISTER_COLUMN_CANDIDATES.expectedCash,
+      "expected cash amount",
+    ),
+    expectedQr: pick(
+      CASH_REGISTER_COLUMN_CANDIDATES.expectedQr,
+      "expected qr amount",
+    ),
+  };
+
+  return cachedCashRegisterColumns;
+}
+
+function parseNumericFromRow(row, ...keys) {
+  for (const key of keys) {
+    const value = row?.[key];
+    if (value != null) {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) return parsed;
+    }
+  }
+  return 0;
+}
+
 export const getCurrent = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -36,6 +106,7 @@ export const getCurrent = async (req, res, next) => {
 
 export const openRegister = async (req, res, next) => {
   try {
+    const columns = await getCashRegisterColumns();
     const userId = req.user?.id;
     const payload = req.body ?? {};
     const { opening_cash_amount, openingcash_amount } = payload;
@@ -68,7 +139,7 @@ export const openRegister = async (req, res, next) => {
     }
 
     const result = await query(
-      `INSERT INTO cash_registers (user_id, opening_cash_amount, status)
+      `INSERT INTO cash_registers (user_id, ${columns.opening}, status)
        VALUES ($1, $2, 'open') RETURNING *`,
       [userId, amount],
     );
@@ -104,6 +175,7 @@ export const openRegister = async (req, res, next) => {
 
 export const closeRegister = async (req, res, next) => {
   try {
+    const columns = await getCashRegisterColumns();
     const { id } = req.params;
     const userId = req.user.id;
     const {
@@ -148,17 +220,21 @@ export const closeRegister = async (req, res, next) => {
 
     const expectedCash =
       parseFloat(salesResult.rows[0].expected_cash) +
-      register.opening_cash_amount;
+      parseNumericFromRow(
+        register,
+        columns.opening,
+        ...CASH_REGISTER_COLUMN_CANDIDATES.opening,
+      );
     const expectedQr = parseFloat(salesResult.rows[0].expected_qr);
     const difference = cashAmount + qrAmount - (expectedCash + expectedQr);
 
     const result = await query(
       `UPDATE cash_registers
        SET closed_at = NOW(),
-           closing_cash_amount = $1,
-           closing_qr_amount = $2,
-           expected_cash_amount = $3,
-           expected_qr_amount = $4,
+           ${columns.closingCash} = $1,
+           ${columns.closingQr} = $2,
+           ${columns.expectedCash} = $3,
+           ${columns.expectedQr} = $4,
            difference = $5,
            status = 'closed',
            notes = $6,
@@ -226,20 +302,30 @@ function mapRegister(row) {
     closed_by_user_id: row.closed_by_user_id,
     opened_at: row.opened_at,
     closed_at: row.closed_at,
-    openingcash_amount: parseFloat(row.opening_cash_amount ?? 0),
+    openingcash_amount: parseNumericFromRow(
+      row,
+      "opening_cash_amount",
+      "openingcash_amount",
+    ),
     closingcash_amount:
-      row.closing_cash_amount != null
-        ? parseFloat(row.closing_cash_amount)
+      row.closing_cash_amount != null || row.closingcash_amount != null
+        ? parseNumericFromRow(row, "closing_cash_amount", "closingcash_amount")
         : null,
     closingqr_amount:
-      row.closing_qr_amount != null ? parseFloat(row.closing_qr_amount) : null,
+      row.closing_qr_amount != null || row.closingqr_amount != null
+        ? parseNumericFromRow(row, "closing_qr_amount", "closingqr_amount")
+        : null,
     expectedcash_amount:
-      row.expected_cash_amount != null
-        ? parseFloat(row.expected_cash_amount)
+      row.expected_cash_amount != null || row.expectedcash_amount != null
+        ? parseNumericFromRow(
+            row,
+            "expected_cash_amount",
+            "expectedcash_amount",
+          )
         : null,
     expectedqr_amount:
-      row.expected_qr_amount != null
-        ? parseFloat(row.expected_qr_amount)
+      row.expected_qr_amount != null || row.expectedqr_amount != null
+        ? parseNumericFromRow(row, "expected_qr_amount", "expectedqr_amount")
         : null,
     difference: row.difference != null ? parseFloat(row.difference) : null,
     status: row.status,
