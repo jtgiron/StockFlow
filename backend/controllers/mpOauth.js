@@ -190,8 +190,8 @@ async function createStoreAndPos(accessToken, mpUserId, merchantId) {
     location: {
       street_number: "0",
       street_name: "Sin dirección",
-      city_name: "Ciudad",
-      state_name: "Provincia",
+      city_name: "Buenos Aires",
+      state_name: "Buenos Aires",
       latitude: -34.6037,
       longitude: -58.3816,
     },
