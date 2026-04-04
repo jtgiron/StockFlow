@@ -2,6 +2,9 @@
 import { query } from "../database.js";
 import { AppError } from "../utils/errors.js";
 
+const UUID_V4_OR_V1_REGEX =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export const getCurrent = async (req, res, next) => {
   try {
     const userId = req.user.id;
@@ -35,7 +38,24 @@ export const openRegister = async (req, res, next) => {
   try {
     const userId = req.user.id;
     const { opening_cash_amount, openingcash_amount } = req.body;
-    const amount = parseFloat(opening_cash_amount ?? openingcash_amount ?? 0);
+    const rawAmount = opening_cash_amount ?? openingcash_amount ?? 0;
+    const amount = Number(rawAmount);
+
+    if (
+      !userId ||
+      typeof userId !== "string" ||
+      !UUID_V4_OR_V1_REGEX.test(userId)
+    ) {
+      throw new AppError(401, "Sesion invalida. Inicia sesion nuevamente");
+    }
+
+    if (!Number.isFinite(amount)) {
+      throw new AppError(400, "El monto inicial debe ser numerico");
+    }
+
+    if (amount < 0) {
+      throw new AppError(400, "El monto inicial no puede ser negativo");
+    }
 
     // Check if user already has an open register
     const existing = await query(
@@ -54,6 +74,17 @@ export const openRegister = async (req, res, next) => {
 
     res.status(201).json(mapRegister(result.rows[0]));
   } catch (err) {
+    if (err.code === "23505") {
+      return res.status(400).json({ message: "Ya tienes una caja abierta" });
+    }
+    if (err.code === "22P02") {
+      return res.status(400).json({ message: "El monto inicial es invalido" });
+    }
+    if (err.code === "23503") {
+      return res
+        .status(401)
+        .json({ message: "Sesion invalida. Inicia sesion nuevamente" });
+    }
     next(err);
   }
 };

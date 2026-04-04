@@ -46,7 +46,7 @@ export default function PaymentModal({
 
   // MP QR waiting state
   const [mpWaiting, setMpWaiting] = useState(false);
-  const [mpExternalRef, setMpExternalRef] = useState<string | null>(null);
+  const [, setMpExternalRef] = useState<string | null>(null);
   const [mpError, setMpError] = useState<string | null>(null);
   const [mpElapsed, setMpElapsed] = useState(0);
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null);

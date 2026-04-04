@@ -6,7 +6,7 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
-import { api } from "../services/api";
+import { api, ApiError } from "../services/api";
 import { useAuth } from "./AuthContext";
 import type { CashRegister } from "../types";
 import toast from "react-hot-toast";
@@ -62,8 +62,10 @@ export function CashRegisterProvider({ children }: { children: ReactNode }) {
         setCurrentRegister(data);
         toast.success("Caja abierta");
         return true;
-      } catch {
-        toast.error("Error al abrir caja");
+      } catch (err) {
+        const message =
+          err instanceof ApiError ? err.message : "Error al abrir caja";
+        toast.error(message);
         return false;
       }
     },
@@ -85,8 +87,10 @@ export function CashRegisterProvider({ children }: { children: ReactNode }) {
         setCurrentRegister(null);
         toast.success("Caja cerrada");
         return true;
-      } catch {
-        toast.error("Error al cerrar caja");
+      } catch (err) {
+        const message =
+          err instanceof ApiError ? err.message : "Error al cerrar caja";
+        toast.error(message);
         return false;
       }
     },
