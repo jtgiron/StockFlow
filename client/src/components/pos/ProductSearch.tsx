@@ -15,11 +15,19 @@ export default function ProductSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
+  function extractProducts(payload: Product[] | { items?: Product[] } | null) {
+    if (Array.isArray(payload)) return payload;
+    if (payload && Array.isArray(payload.items)) return payload.items;
+    return [];
+  }
+
   // Load all active products once
   useEffect(() => {
     api
-      .get<Product[]>("/products")
-      .then((data) => setAllProducts((data ?? []).filter((p) => p.is_active)))
+      .get<Product[] | { items: Product[] }>("/products?limit=200")
+      .then((data) =>
+        setAllProducts(extractProducts(data).filter((p) => p.is_active)),
+      )
       .catch(() => setAllProducts([]));
   }, []);
 
