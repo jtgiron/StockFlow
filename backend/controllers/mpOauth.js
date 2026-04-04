@@ -180,8 +180,8 @@ export const callback = async (req, res, next) => {
  */
 async function createStoreAndPos(accessToken, mpUserId, merchantId) {
   const sponsorId = process.env.MP_SPONSOR_ID;
-  const externalStoreId = `SF-STORE-${merchantId}`;
-  const externalPosId = `SF-POS-${merchantId}`;
+  const externalStoreId = `SFSTORE${merchantId}`;
+  const externalPosId = `SFPOS${merchantId}`;
 
   // 1. Create Store (sucursal)
   const storePayload = {
