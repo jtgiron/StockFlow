@@ -86,6 +86,9 @@ export default function ProductForm({
           placeholder="Separar por coma (ej: 779..., 750...)"
           value={form.barcodesInput}
           onChange={(e) => updateField("barcodesInput", e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") e.preventDefault();
+          }}
         />
         <Input
           label="Nombre *"

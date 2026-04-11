@@ -43,11 +43,8 @@ export const createSale = async (req, res, next) => {
           throw new AppError(400, `Stock insuficiente para "${product.name}"`);
         }
 
-        // Use client-sent unit_price if provided, otherwise use current sell_price
-        const unitPrice =
-          item.unit_price != null
-            ? Number(item.unit_price)
-            : Number(product.sell_price);
+        // Always use authoritative price from DB — never trust client-sent prices
+        const unitPrice = Number(product.sell_price);
         const subtotal = unitPrice * qty;
         totalAmount += subtotal;
 

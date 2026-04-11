@@ -48,23 +48,45 @@ export const createOrder = async (req, res, next) => {
     }
 
     const externalReference = `SF-${Date.now()}-${uuidv4().slice(0, 8)}`;
-    const amount = Number(total_amount);
+
+    // Resolve authoritative prices from DB — never trust client-sent prices
+    const verifiedItems = [];
+    let verifiedTotal = 0;
+    for (const item of items) {
+      const productResult = await query(
+        "SELECT id, name, sell_price FROM products WHERE id = $1 AND is_active = true",
+        [item.product_id],
+      );
+      if (productResult.rows.length === 0) {
+        throw new AppError(400, `Producto ${item.product_id} no encontrado o inactivo`);
+      }
+      const product = productResult.rows[0];
+      const qty = Number(item.quantity);
+      const unitPrice = Number(product.sell_price);
+      verifiedItems.push({
+        product_id: product.id,
+        name: product.name,
+        unit_price: unitPrice,
+        quantity: qty,
+      });
+      verifiedTotal += unitPrice * qty;
+    }
 
     // Build Instore QR order payload
     // Docs: https://www.mercadopago.com.ar/developers/es/reference/instore_orders_v2/_instore_qr_seller_collectors_user_id_stores_external_store_id_pos_external_pos_id_orders/put
     const mpPayload = {
       external_reference: externalReference,
       title: "Venta StockFlow",
-      description: `Venta de ${items.length} producto(s)`,
-      total_amount: amount,
-      items: items.map((item) => ({
+      description: `Venta de ${verifiedItems.length} producto(s)`,
+      total_amount: verifiedTotal,
+      items: verifiedItems.map((item) => ({
         sku_number: String(item.product_id),
         category: "marketplace",
-        title: item.name || item.title || "Producto",
-        unit_price: Number(item.unit_price),
-        quantity: Number(item.quantity),
+        title: item.name,
+        unit_price: item.unit_price,
+        quantity: item.quantity,
         unit_measure: "unit",
-        total_amount: Number(item.unit_price) * Number(item.quantity),
+        total_amount: item.unit_price * item.quantity,
       })),
       cash_out: { amount: 0 },
     };
@@ -107,7 +129,7 @@ export const createOrder = async (req, res, next) => {
       );
     }
 
-    // Save pending order to DB (with merchant_id for webhook token resolution)
+    // Save pending order to DB with verified prices (merchant_id for webhook token resolution)
     await query(
       `INSERT INTO mp_pending_orders (external_reference, mp_order_id, cash_register_id, user_id, items, total_amount, status, merchant_id)
        VALUES ($1, $2, $3, $4, $5, $6, 'pending', $7)`,
@@ -116,8 +138,8 @@ export const createOrder = async (req, res, next) => {
         mpData.in_store_order_id || null,
         cash_register_id,
         userId,
-        JSON.stringify(items),
-        amount,
+        JSON.stringify(verifiedItems),
+        verifiedTotal,
         merchant.id,
       ],
     );
@@ -346,10 +368,8 @@ async function createSaleFromPendingOrder(externalRef, mpPaymentId) {
 
         const product = productResult.rows[0];
         const qty = Number(item.quantity);
-        const unitPrice =
-          item.unit_price != null
-            ? Number(item.unit_price)
-            : Number(product.sell_price);
+        // Always use authoritative price from DB — never trust stored client prices
+        const unitPrice = Number(product.sell_price);
         const subtotal = unitPrice * qty;
         totalAmount += subtotal;
 
