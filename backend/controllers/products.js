@@ -389,7 +389,7 @@ export const deleteProduct = async (req, res, next) => {
   }
 };
 
-// Bulk create products (transactional)
+// Bulk create products (best-effort: each row is independent)
 export const bulkCreateProducts = async (req, res, next) => {
   const { products } = req.body;
 
@@ -398,22 +398,23 @@ export const bulkCreateProducts = async (req, res, next) => {
   }
 
   try {
-    const { withTransaction } = await import("../utils/db.js");
+    const details = [];
 
-    const details = await withTransaction(async (txQuery) => {
-      const results = [];
-      for (let i = 0; i < products.length; i++) {
-        const raw = products[i];
+    for (let i = 0; i < products.length; i++) {
+      const raw = products[i];
+
+      try {
         const { data, error } = normalizeProductCreate(raw);
 
         if (error) {
-          throw new Error(`Fila ${i + 1} (${raw.name || "?"}): ${error}`);
+          details.push({ row: i + 1, name: raw.name || "?", success: false, error });
+          continue;
         }
 
         // Resolve category by name if provided
         let categoryId = data.category_id;
         if (!categoryId && raw.category_name) {
-          const catResult = await txQuery(
+          const catResult = await query(
             "SELECT id FROM categories WHERE LOWER(name) = LOWER($1)",
             [raw.category_name.trim()],
           );
@@ -422,7 +423,7 @@ export const bulkCreateProducts = async (req, res, next) => {
           }
         }
 
-        const result = await txQuery(
+        const result = await query(
           `INSERT INTO products (barcode, barcodes, name, description, category_id, cost_price, sell_price, stock_quantity, min_stock_alert, is_active, image_url)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
           [
@@ -439,17 +440,25 @@ export const bulkCreateProducts = async (req, res, next) => {
             data.image_url,
           ],
         );
-        results.push({ row: i + 1, name: data.name, id: result.rows[0].id });
-      }
-      return results;
-    });
 
-    res.status(201).json({
-      created: details.length,
-      failed: 0,
-      total: products.length,
-      details,
-    });
+        details.push({ row: i + 1, name: data.name, success: true });
+      } catch (rowErr) {
+        details.push({
+          row: i + 1,
+          name: raw.name || "?",
+          success: false,
+          error: rowErr.message,
+        });
+      }
+    }
+
+    const created = details.filter((d) => d.success).length;
+    const failed = details.filter((d) => !d.success).length;
+    const total = products.length;
+
+    const status = failed === total ? 400 : created === total ? 201 : 200;
+
+    res.status(status).json({ created, failed, total, details });
   } catch (err) {
     next(err);
   }

@@ -8,6 +8,7 @@ import SearchInput from "../components/ui/SearchInput";
 import Badge from "../components/ui/Badge";
 import Modal from "../components/ui/Modal";
 import ProductForm from "../components/products/ProductForm";
+import ExcelImportModal from "../components/products/ExcelImportModal";
 
 import type { Product } from "../types";
 import { getProductBarcodes } from "../utils/barcodes";
@@ -20,10 +21,12 @@ export default function ProductsPage() {
     updateProduct,
     toggleActive,
     deleteProduct,
+    fetchProducts,
   } = useProducts();
   const { isAdmin } = useAuth();
   const [search, setSearch] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   const [editing, setEditing] = useState<Product | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Product | null>(null);
@@ -77,6 +80,22 @@ export default function ProductsPage() {
           action={
             isAdmin && (
               <div className="flex gap-2">
+                <Button variant="secondary" onClick={() => setImportOpen(true)}>
+                  <svg
+                    className="w-4 h-4"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5"
+                    />
+                  </svg>
+                  Importar Excel
+                </Button>
                 <Button onClick={openCreate}>
                   <svg
                     className="w-4 h-4"
@@ -345,6 +364,12 @@ export default function ProductsPage() {
           </div>
         </div>
       </Modal>
+
+      <ExcelImportModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onImportComplete={fetchProducts}
+      />
     </div>
   );
 }
