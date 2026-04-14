@@ -57,7 +57,7 @@ export function CashRegisterProvider({ children }: { children: ReactNode }) {
       if (!user) return false;
       try {
         const data = await api.post<CashRegister>("/cash-registers/open", {
-          openingcash_amount: initialAmount,
+          opening_cash_amount: initialAmount,
         });
         setCurrentRegister(data);
         toast.success("Caja abierta");
@@ -79,8 +79,8 @@ export function CashRegisterProvider({ children }: { children: ReactNode }) {
         await api.post<CashRegister>(
           `/cash-registers/${currentRegister.id}/close`,
           {
-            closingcash_amount: finalCashAmount,
-            closingqr_amount: finalQrAmount,
+            closing_cash_amount: finalCashAmount,
+            closing_qr_amount: finalQrAmount,
             notes,
           },
         );
