@@ -6,8 +6,7 @@ import {
   type PaymentBreakdown,
   type DailyProfit,
 } from "../hooks/useReports";
-import { formatCurrency } from "../utils/formatters";
-import { cn } from "../utils/formatters";
+import { formatCurrency, cn } from "../utils/formatters";
 import Card, { CardHeader } from "../components/ui/Card";
 import Input from "../components/ui/Input";
 import Button from "../components/ui/Button";
@@ -59,6 +58,17 @@ const tooltipStyle = {
   labelStyle: { color: "#cbd5e1", marginBottom: 6 },
   itemStyle: { color: "#f8fafc" },
 };
+
+function formatChartDate(dateStr: string, groupBy: GroupBy): string {
+  const d = new Date(dateStr + "T12:00:00");
+  if (groupBy === "month") {
+    return d.toLocaleDateString("es-AR", { month: "short", year: "2-digit" });
+  }
+  if (groupBy === "week") {
+    return `Sem ${d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" })}`;
+  }
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit" });
+}
 
 type Tab = "ventas" | "productos" | "pagos" | "ganancias";
 
@@ -306,6 +316,7 @@ function VentasTab({
                   tick={{ fill: chartTickColor, fontSize: 11, fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
+                  tickFormatter={(v) => formatChartDate(String(v), groupBy)}
                 />
                 <YAxis
                   tick={{ fill: chartTickColor, fontSize: 11 }}
@@ -316,6 +327,9 @@ function VentasTab({
                 />
                 <Tooltip
                   {...tooltipStyle}
+                  labelFormatter={(label) =>
+                    formatChartDate(String(label), groupBy)
+                  }
                   formatter={(value) => [
                     formatCurrency(Number(value)),
                     "Ingresos",
@@ -624,6 +638,7 @@ function GananciasTab({
                   tick={{ fill: chartTickColor, fontSize: 11, fontWeight: 500 }}
                   axisLine={false}
                   tickLine={false}
+                  tickFormatter={(v) => formatChartDate(String(v), "day")}
                 />
                 <YAxis
                   tick={{ fill: chartTickColor, fontSize: 11 }}
@@ -634,6 +649,9 @@ function GananciasTab({
                 />
                 <Tooltip
                   {...tooltipStyle}
+                  labelFormatter={(label) =>
+                    formatChartDate(String(label), "day")
+                  }
                   formatter={(value, name) => [
                     formatCurrency(Number(value)),
                     String(name),
