@@ -205,7 +205,7 @@ export const closeRegister = async (req, res, next) => {
         ...CASH_REGISTER_COLUMN_CANDIDATES.opening,
       );
     const expectedQr = parseFloat(salesResult.rows[0].expected_qr);
-    const difference = cashAmount + qrAmount - (expectedCash + expectedQr);
+    const difference = cashAmount - expectedCash;
 
     const result = await query(
       `UPDATE cash_registers
