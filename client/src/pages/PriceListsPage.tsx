@@ -151,9 +151,9 @@ function PriceListDetail({
 
   useEffect(() => {
     api
-      .get<Product[]>("/products")
+      .get<{ items: Product[] }>("/products?only_active=true&limit=200")
       .then((data) => {
-        setProducts((data ?? []).filter((p) => p.is_active));
+        setProducts(data?.items ?? []);
       })
       .catch(() => setProducts([]));
   }, []);
