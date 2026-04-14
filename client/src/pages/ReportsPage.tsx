@@ -60,7 +60,8 @@ const tooltipStyle = {
 };
 
 function formatChartDate(dateStr: string, groupBy: GroupBy): string {
-  const d = new Date(dateStr + "T12:00:00");
+  const iso = String(dateStr).slice(0, 10);
+  const d = new Date(iso + "T12:00:00");
   if (groupBy === "month") {
     return d.toLocaleDateString("es-AR", { month: "short", year: "2-digit" });
   }
