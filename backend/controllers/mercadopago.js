@@ -26,11 +26,10 @@ export const createOrder = async (req, res, next) => {
     }
 
     const userId = req.user.id;
-    console.log("MP create-order body:", JSON.stringify(req.body));
     const { cash_register_id, items, total_amount } = req.body;
 
     if (!cash_register_id) {
-      throw new AppError(400, `cash_register_id es obligatorio (received: ${JSON.stringify(cash_register_id)}, body keys: ${Object.keys(req.body || {})})`);
+      throw new AppError(400, "cash_register_id es obligatorio");
     }
     if (!items || !Array.isArray(items) || items.length === 0) {
       throw new AppError(400, "Se requiere al menos un item");
@@ -70,8 +69,9 @@ export const createOrder = async (req, res, next) => {
         unit_price: unitPrice,
         quantity: qty,
       });
-      verifiedTotal += unitPrice * qty;
+      verifiedTotal += Math.round(unitPrice * qty * 100) / 100;
     }
+    verifiedTotal = Math.round(verifiedTotal * 100) / 100;
 
     // Build Instore QR order payload
     // Docs: https://www.mercadopago.com.ar/developers/es/reference/instore_orders_v2/_instore_qr_seller_collectors_user_id_stores_external_store_id_pos_external_pos_id_orders/put
@@ -80,15 +80,21 @@ export const createOrder = async (req, res, next) => {
       title: "Venta StockFlow",
       description: `Venta de ${verifiedItems.length} producto(s)`,
       total_amount: verifiedTotal,
-      items: verifiedItems.map((item) => ({
-        sku_number: String(item.product_id),
-        category: "marketplace",
-        title: item.name,
-        unit_price: item.unit_price,
-        quantity: item.quantity,
-        unit_measure: "unit",
-        total_amount: item.unit_price * item.quantity,
-      })),
+      items: verifiedItems.map((item) => {
+        const subtotal = Math.round(item.unit_price * item.quantity * 100) / 100;
+        // MP QR doesn't accept fractional quantities with unit_measure "unit"
+        // Normalize: send qty=1 with subtotal as unit_price
+        const isInteger = Number.isInteger(item.quantity);
+        return {
+          sku_number: String(item.product_id),
+          category: "marketplace",
+          title: item.name,
+          unit_price: isInteger ? item.unit_price : subtotal,
+          quantity: isInteger ? item.quantity : 1,
+          unit_measure: "unit",
+          total_amount: subtotal,
+        };
+      }),
       cash_out: { amount: 0 },
     };
 
@@ -104,8 +110,6 @@ export const createOrder = async (req, res, next) => {
 
     // PUT to Instore QR endpoint (creates/replaces order on the POS QR)
     const mpUrl = `${MP_API_BASE}/instore/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/orders`;
-    console.log("MP create-order URL:", mpUrl);
-    console.log("MP create-order payload:", JSON.stringify(mpPayload, null, 2));
 
     const mpResponse = await fetch(mpUrl, {
       method: "PUT",
