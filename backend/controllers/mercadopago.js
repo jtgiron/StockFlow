@@ -104,6 +104,8 @@ export const createOrder = async (req, res, next) => {
 
     // PUT to Instore QR endpoint (creates/replaces order on the POS QR)
     const mpUrl = `${MP_API_BASE}/instore/qr/seller/collectors/${mpUserId}/pos/${externalPosId}/orders`;
+    console.log("MP create-order URL:", mpUrl);
+    console.log("MP create-order payload:", JSON.stringify(mpPayload, null, 2));
 
     const mpResponse = await fetch(mpUrl, {
       method: "PUT",
