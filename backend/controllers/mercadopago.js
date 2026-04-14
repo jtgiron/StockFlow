@@ -26,10 +26,11 @@ export const createOrder = async (req, res, next) => {
     }
 
     const userId = req.user.id;
+    console.log("MP create-order body:", JSON.stringify(req.body));
     const { cash_register_id, items, total_amount } = req.body;
 
     if (!cash_register_id) {
-      throw new AppError(400, "cash_register_id es obligatorio");
+      throw new AppError(400, `cash_register_id es obligatorio (received: ${JSON.stringify(cash_register_id)}, body keys: ${Object.keys(req.body || {})})`);
     }
     if (!items || !Array.isArray(items) || items.length === 0) {
       throw new AppError(400, "Se requiere al menos un item");
