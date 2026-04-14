@@ -37,6 +37,8 @@ const HEADER_MAP: Record<string, string> = {
   codigo_barras: "barcodes",
   código_de_barras: "barcodes",
   "código de barras": "barcodes",
+  "codigos de barras": "barcodes",
+  "códigos de barras": "barcodes",
   "codigo de barras": "barcodes",
   barcode: "barcodes",
   barcodes: "barcodes",
@@ -44,13 +46,17 @@ const HEADER_MAP: Record<string, string> = {
   código: "barcodes",
   // precio costo
   precio_costo: "cost_price",
+  "precio costo": "cost_price",
   costo: "cost_price",
   cost_price: "cost_price",
+  cost: "cost_price",
   // precio venta
   precio_venta: "sell_price",
+  "precio venta": "sell_price",
   precio: "sell_price",
   venta: "sell_price",
   sell_price: "sell_price",
+  price: "sell_price",
   // stock
   stock: "stock_quantity",
   stock_quantity: "stock_quantity",
@@ -58,6 +64,8 @@ const HEADER_MAP: Record<string, string> = {
   // stock mínimo
   stock_minimo: "min_stock_alert",
   stock_mínimo: "min_stock_alert",
+  "stock minimo": "min_stock_alert",
+  "stock mínimo": "min_stock_alert",
   minimo: "min_stock_alert",
   mínimo: "min_stock_alert",
   alerta: "min_stock_alert",

@@ -71,7 +71,6 @@ CREATE INDEX IF NOT EXISTS idx_stock_movements_user ON stock_movements(user_id);
 CREATE TABLE IF NOT EXISTS cash_registers (
   id                    SERIAL PRIMARY KEY,
   user_id               UUID NOT NULL REFERENCES users(id),
-  closed_by_user_id     UUID REFERENCES users(id),
   opened_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   closed_at             TIMESTAMPTZ,
   opening_cash_amount   NUMERIC(12,2) NOT NULL DEFAULT 0,
@@ -86,7 +85,6 @@ CREATE TABLE IF NOT EXISTS cash_registers (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cash_registers_user ON cash_registers(user_id);
-CREATE INDEX IF NOT EXISTS idx_cash_registers_closed_by_user ON cash_registers(closed_by_user_id);
 CREATE INDEX IF NOT EXISTS idx_cash_registers_status ON cash_registers(status);
 
 -- ============================================================
