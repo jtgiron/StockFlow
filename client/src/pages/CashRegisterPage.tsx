@@ -11,6 +11,7 @@ import Button from "../components/ui/Button";
 import Input from "../components/ui/Input";
 import Badge from "../components/ui/Badge";
 import Table from "../components/ui/Table";
+import CashRegisterDetailModal from "../components/cash-register/CashRegisterDetailModal";
 import type { CashRegister } from "../types";
 
 function CashRegisterContent() {
@@ -27,6 +28,9 @@ function CashRegisterContent() {
   const [finalAmountqr, setFinalAmountqr] = useState("");
   const [closingNotes, setClosingNotes] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const [selectedRegisterId, setSelectedRegisterId] = useState<number | null>(
+    null,
+  );
 
   async function handleOpen(e: FormEvent) {
     e.preventDefault();
@@ -227,9 +231,16 @@ function CashRegisterContent() {
             data={history}
             keyExtractor={(r) => r.id}
             loading={histLoading}
+            onRowClick={(r) => setSelectedRegisterId(r.id)}
           />
         </Card>
       )}
+
+      <CashRegisterDetailModal
+        cashRegisterId={selectedRegisterId}
+        open={selectedRegisterId !== null}
+        onClose={() => setSelectedRegisterId(null)}
+      />
     </div>
   );
 }

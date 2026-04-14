@@ -13,6 +13,7 @@ interface TableProps<T> {
   keyExtractor: (item: T, index: number) => string | number;
   emptyMessage?: string;
   loading?: boolean;
+  onRowClick?: (item: T, index: number) => void;
 }
 
 export default function Table<T>({
@@ -21,6 +22,7 @@ export default function Table<T>({
   keyExtractor,
   emptyMessage = "No hay datos",
   loading,
+  onRowClick,
 }: TableProps<T>) {
   if (loading) {
     return (
@@ -81,7 +83,11 @@ export default function Table<T>({
             data.map((item, rowIdx) => (
               <tr
                 key={keyExtractor(item, rowIdx)}
-                className="border-b border-surface-800/50 hover:bg-surface-800/25 transition-colors duration-100 last:border-0"
+                className={cn(
+                  "border-b border-surface-800/50 hover:bg-surface-800/25 transition-colors duration-100 last:border-0",
+                  onRowClick && "cursor-pointer",
+                )}
+                onClick={onRowClick ? () => onRowClick(item, rowIdx) : undefined}
               >
                 {columns.map((col, ci) => (
                   <td

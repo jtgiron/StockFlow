@@ -183,19 +183,66 @@ export const getSales = async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 50, 1), 200);
     const offset = Math.max(parseInt(req.query.offset) || 0, 0);
+    const cashRegisterId = req.query.cash_register_id
+      ? parseInt(req.query.cash_register_id)
+      : null;
 
-    const countResult = await query("SELECT COUNT(*) FROM sales");
+    const params = [];
+    let whereClause = "";
+    if (cashRegisterId) {
+      params.push(cashRegisterId);
+      whereClause = `WHERE s.cash_register_id = $${params.length}`;
+    }
+
+    const countResult = await query(
+      `SELECT COUNT(*) FROM sales s ${whereClause}`,
+      params,
+    );
     const total = parseInt(countResult.rows[0].count);
 
+    params.push(limit, offset);
     const result = await query(
       `SELECT s.*,
               json_build_object('id', u.id, 'full_name', u.full_name, 'role', u.role) AS profile
        FROM sales s
        JOIN users u ON u.id = s.user_id
+       ${whereClause}
        ORDER BY s.created_at DESC
-       LIMIT $1 OFFSET $2`,
-      [limit, offset],
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
     );
+
+    // When filtering by cash register, include items and payments per sale
+    if (cashRegisterId) {
+      const saleIds = result.rows.map((s) => s.id);
+      if (saleIds.length > 0) {
+        const itemsResult = await query(
+          `SELECT si.*, row_to_json(p) AS product
+           FROM sale_items si
+           JOIN products p ON p.id = si.product_id
+           WHERE si.sale_id = ANY($1)`,
+          [saleIds],
+        );
+        const paymentsResult = await query(
+          "SELECT * FROM sale_payments WHERE sale_id = ANY($1)",
+          [saleIds],
+        );
+
+        const itemsBySale = {};
+        for (const item of itemsResult.rows) {
+          (itemsBySale[item.sale_id] ||= []).push(item);
+        }
+        const paymentsBySale = {};
+        for (const pay of paymentsResult.rows) {
+          (paymentsBySale[pay.sale_id] ||= []).push(pay);
+        }
+
+        for (const sale of result.rows) {
+          sale.sale_items = itemsBySale[sale.id] || [];
+          sale.sale_payments = paymentsBySale[sale.id] || [];
+        }
+      }
+    }
 
     res.json({ items: result.rows, total });
   } catch (err) {
