@@ -99,7 +99,7 @@ function CashRegisterContent() {
           : "—",
     },
     {
-      header: "Monto cierre QR",
+      header: "Monto cierre MP",
       accessor: (r: CashRegister) =>
         r.closingqr_amount != null ? formatCurrency(r.closingqr_amount) : "—",
     },
@@ -201,7 +201,7 @@ function CashRegisterContent() {
                 required
               />
               <Input
-                label="Monto final en caja (QR)"
+                label="Monto final Mercado Pago"
                 type="number"
                 step="0.01"
                 min="0"

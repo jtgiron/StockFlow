@@ -17,9 +17,7 @@ interface PaymentModalProps {
 
 const paymentMethods: { value: PaymentMethod; label: string }[] = [
   { value: "cash", label: "Efectivo" },
-  { value: "card", label: "Tarjeta" },
-  { value: "qr", label: "QR" },
-  { value: "mercadopago", label: "MercadoPago" },
+  { value: "mercadopago", label: "Mercado Pago" },
   { value: "credit", label: "Fiado" },
 ];
 

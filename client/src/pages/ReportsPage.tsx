@@ -38,9 +38,7 @@ const COLORS = [
 
 const PAYMENT_LABELS: Record<string, string> = {
   cash: "Efectivo",
-  card: "Tarjeta",
-  qr: "QR",
-  mercadopago: "MercadoPago",
+  mercadopago: "Mercado Pago",
   credit: "Fiado",
 };
 

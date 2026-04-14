@@ -7,9 +7,7 @@ import type { Sale, PaymentMethod } from "../../types";
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
   cash: "Efectivo",
-  card: "Tarjeta",
-  qr: "QR",
-  mercadopago: "MercadoPago",
+  mercadopago: "Mercado Pago",
   credit: "Fiado",
 };
 

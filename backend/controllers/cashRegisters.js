@@ -190,7 +190,7 @@ export const closeRegister = async (req, res, next) => {
     const salesResult = await query(
       `SELECT
          COALESCE(SUM(CASE WHEN sp.payment_method = 'cash' THEN sp.amount ELSE 0 END), 0) AS expected_cash,
-         COALESCE(SUM(CASE WHEN sp.payment_method IN ('qr','mercadopago') THEN sp.amount ELSE 0 END), 0) AS expected_qr
+         COALESCE(SUM(CASE WHEN sp.payment_method = 'mercadopago' THEN sp.amount ELSE 0 END), 0) AS expected_qr
        FROM sales s
        JOIN sale_payments sp ON sp.sale_id = s.id
        WHERE s.cash_register_id = $1 AND s.status = 'completed'`,

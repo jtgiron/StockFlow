@@ -6,7 +6,7 @@ const saleItemSchema = z.object({
 });
 
 const salePaymentSchema = z.object({
-  payment_method: z.enum(["cash", "card", "qr", "mercadopago", "credit"], {
+  payment_method: z.enum(["cash", "mercadopago", "credit"], {
     error: "Método de pago inválido",
   }),
   amount: z.number({ error: "amount debe ser un número" }).positive("El monto debe ser mayor a 0"),

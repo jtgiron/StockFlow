@@ -92,7 +92,7 @@ export interface SaleItem {
   product?: Product;
 }
 
-export type PaymentMethod = "cash" | "card" | "qr" | "mercadopago" | "credit";
+export type PaymentMethod = "cash" | "mercadopago" | "credit";
 
 export interface SalePayment {
   id: number;
