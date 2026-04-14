@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { formatCurrency } from "../../utils/formatters";
 import { useCart } from "../../contexts/CartContext";
 
@@ -70,30 +71,39 @@ export default function Cart() {
               </button>
             </div>
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() =>
-                    updateQuantity(item.product.id, item.quantity - 1)
-                  }
-                  className="w-7 h-7 rounded bg-surface-800 text-surface-300 hover:bg-surface-700 flex items-center justify-center text-base transition-colors"
-                >
-                  −
-                </button>
-                <span className="w-8 text-center text-base font-mono text-surface-200">
-                  {item.quantity}
-                </span>
-                <button
-                  onClick={() =>
-                    updateQuantity(item.product.id, item.quantity + 1)
-                  }
-                  className="w-7 h-7 rounded bg-surface-800 text-surface-300 hover:bg-surface-700 flex items-center justify-center text-base transition-colors"
-                >
-                  +
-                </button>
-                <span className="text-sm text-surface-500 ml-2">
-                  × {formatCurrency(item.unit_price)}
-                </span>
-              </div>
+              {item.product.sell_by_weight ? (
+                <WeightQtyControl
+                  productId={item.product.id}
+                  quantity={item.quantity}
+                  unitPrice={item.unit_price}
+                  onUpdate={updateQuantity}
+                />
+              ) : (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() =>
+                      updateQuantity(item.product.id, item.quantity - 1)
+                    }
+                    className="w-7 h-7 rounded bg-surface-800 text-surface-300 hover:bg-surface-700 flex items-center justify-center text-base transition-colors"
+                  >
+                    −
+                  </button>
+                  <span className="w-8 text-center text-base font-mono text-surface-200">
+                    {item.quantity}
+                  </span>
+                  <button
+                    onClick={() =>
+                      updateQuantity(item.product.id, item.quantity + 1)
+                    }
+                    className="w-7 h-7 rounded bg-surface-800 text-surface-300 hover:bg-surface-700 flex items-center justify-center text-base transition-colors"
+                  >
+                    +
+                  </button>
+                  <span className="text-sm text-surface-500 ml-2">
+                    × {formatCurrency(item.unit_price)}
+                  </span>
+                </div>
+              )}
               <span className="text-base font-medium text-amber-400">
                 {formatCurrency(item.subtotal)}
               </span>
@@ -110,6 +120,64 @@ export default function Cart() {
           </span>
         </div>
       </div>
+    </div>
+  );
+}
+
+function WeightQtyControl({
+  productId,
+  quantity,
+  unitPrice,
+  onUpdate,
+}: {
+  productId: number;
+  quantity: number;
+  unitPrice: number;
+  onUpdate: (productId: number, quantity: number) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState("");
+
+  function startEdit() {
+    setDraft(quantity.toString());
+    setEditing(true);
+  }
+
+  function commitEdit() {
+    const val = parseFloat(draft);
+    if (val > 0) {
+      onUpdate(productId, val);
+    }
+    setEditing(false);
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      {editing ? (
+        <input
+          type="number"
+          step="0.001"
+          min="0.001"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onBlur={commitEdit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commitEdit();
+          }}
+          autoFocus
+          className="w-20 rounded bg-surface-800 border border-surface-600 px-2 py-1 text-base font-mono text-center text-surface-200 outline-none focus:ring-1 focus:ring-amber-500/40"
+        />
+      ) : (
+        <button
+          onClick={startEdit}
+          className="px-2 py-1 rounded bg-surface-800 text-base font-mono text-surface-200 hover:bg-surface-700 transition-colors"
+        >
+          {quantity.toFixed(3)} kg
+        </button>
+      )}
+      <span className="text-sm text-surface-500">
+        × {formatCurrency(unitPrice)}/kg
+      </span>
     </div>
   );
 }

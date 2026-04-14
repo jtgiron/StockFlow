@@ -21,6 +21,8 @@ const PRODUCT_UPDATE_FIELDS = {
   is_active: "is_active",
   imageUrl: "image_url",
   image_url: "image_url",
+  sellByWeight: "sell_by_weight",
+  sell_by_weight: "sell_by_weight",
 };
 
 function normalizeNullableString(value) {
@@ -102,9 +104,10 @@ function normalizeProductUpdate(body) {
         break;
       }
 
-      case "is_active": {
+      case "is_active":
+      case "sell_by_weight": {
         if (typeof rawValue !== "boolean") {
-          return { error: "is_active debe ser booleano" };
+          return { error: `${field} debe ser booleano` };
         }
         normalized[field] = rawValue;
         break;
@@ -143,6 +146,7 @@ function normalizeProductCreate(body) {
     min_stock_alert: data.min_stock_alert ?? 0,
     is_active: data.is_active ?? true,
     image_url: data.image_url ?? null,
+    sell_by_weight: data.sell_by_weight ?? false,
   };
 
   if (!normalized.barcode && normalized.barcodes.length > 0) {
@@ -247,8 +251,9 @@ export const createProduct = async (req, res, next) => {
         stock_quantity,
         min_stock_alert,
         is_active,
-        image_url
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        image_url,
+        sell_by_weight
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
       RETURNING *`,
       [
         data.barcode,
@@ -262,6 +267,7 @@ export const createProduct = async (req, res, next) => {
         data.min_stock_alert,
         data.is_active,
         data.image_url,
+        data.sell_by_weight,
       ],
     );
 
@@ -424,8 +430,8 @@ export const bulkCreateProducts = async (req, res, next) => {
         }
 
         const result = await query(
-          `INSERT INTO products (barcode, barcodes, name, description, category_id, cost_price, sell_price, stock_quantity, min_stock_alert, is_active, image_url)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) RETURNING id`,
+          `INSERT INTO products (barcode, barcodes, name, description, category_id, cost_price, sell_price, stock_quantity, min_stock_alert, is_active, image_url, sell_by_weight)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING id`,
           [
             data.barcode,
             data.barcodes,
@@ -438,6 +444,7 @@ export const bulkCreateProducts = async (req, res, next) => {
             data.min_stock_alert,
             data.is_active,
             data.image_url,
+            data.sell_by_weight,
           ],
         );
 

@@ -3,6 +3,7 @@ import { api } from "../../services/api";
 import { useCart } from "../../contexts/CartContext";
 import type { Product } from "../../types";
 import SearchInput from "../ui/SearchInput";
+import WeightInputModal from "./WeightInputModal";
 import toast from "react-hot-toast";
 import { getProductBarcodes } from "../../utils/barcodes";
 
@@ -11,6 +12,7 @@ export default function ProductSearch() {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<Product[]>([]);
   const [showResults, setShowResults] = useState(false);
+  const [weightProduct, setWeightProduct] = useState<Product | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -62,6 +64,12 @@ export default function ProductSearch() {
   }, []);
 
   function selectProduct(product: Product) {
+    if (product.sell_by_weight) {
+      setWeightProduct(product);
+      setQuery("");
+      setShowResults(false);
+      return;
+    }
     if (product.stock_quantity <= 0) {
       toast.error("Producto sin stock");
       return;
@@ -69,6 +77,12 @@ export default function ProductSearch() {
     addItem(product);
     setQuery("");
     setShowResults(false);
+    inputRef.current?.focus();
+  }
+
+  function handleWeightConfirm(product: Product, weight: number) {
+    addItem(product, weight);
+    setWeightProduct(null);
     inputRef.current?.focus();
   }
 
@@ -110,12 +124,17 @@ export default function ProductSearch() {
               <div className="text-right shrink-0 ml-4">
                 <p className="text-base font-semibold text-amber-400">
                   ${Number(p.sell_price).toFixed(2)}
+                  {p.sell_by_weight && <span className="text-xs text-surface-500">/kg</span>}
                 </p>
-                <p
-                  className={`text-sm ${p.stock_quantity <= p.min_stock_alert ? "text-red-400" : "text-surface-500"}`}
-                >
-                  Stock: {p.stock_quantity}
-                </p>
+                {p.sell_by_weight ? (
+                  <p className="text-sm text-blue-400">Por peso</p>
+                ) : (
+                  <p
+                    className={`text-sm ${p.stock_quantity <= p.min_stock_alert ? "text-red-400" : "text-surface-500"}`}
+                  >
+                    Stock: {p.stock_quantity}
+                  </p>
+                )}
               </div>
             </button>
           ))}
@@ -127,6 +146,13 @@ export default function ProductSearch() {
           No se encontraron productos
         </div>
       )}
+
+      <WeightInputModal
+        open={weightProduct !== null}
+        product={weightProduct}
+        onConfirm={handleWeightConfirm}
+        onClose={() => setWeightProduct(null)}
+      />
     </div>
   );
 }

@@ -70,6 +70,12 @@ const HEADER_MAP: Record<string, string> = {
   mínimo: "min_stock_alert",
   alerta: "min_stock_alert",
   min_stock_alert: "min_stock_alert",
+  // sell_by_weight
+  "por peso": "sell_by_weight",
+  "por_peso": "sell_by_weight",
+  peso: "sell_by_weight",
+  sell_by_weight: "sell_by_weight",
+  "venta por peso": "sell_by_weight",
 };
 
 // Normaliza el header: minúsculas, sin espacios redundantes
@@ -146,6 +152,12 @@ function coerceTypes(data: Record<string, unknown>): Record<string, unknown> {
       const n = toNumber(result[field]);
       if (n !== null) result[field] = Math.trunc(n);
     }
+  }
+
+  // Boolean coercion for sell_by_weight
+  if (result["sell_by_weight"] !== undefined && result["sell_by_weight"] !== null) {
+    const raw = String(result["sell_by_weight"]).trim().toLowerCase();
+    result["sell_by_weight"] = ["true", "1", "si", "sí", "yes", "x"].includes(raw);
   }
 
   return result;

@@ -13,6 +13,7 @@ export const createProductSchema = z.object({
   min_stock_alert: z.number().int().nonnegative("El stock mínimo debe ser >= 0").default(0),
   is_active: z.boolean().default(true),
   image_url: z.string().trim().optional().nullable(),
+  sell_by_weight: z.boolean().default(false),
 });
 
 export const updateProductSchema = createProductSchema.partial();

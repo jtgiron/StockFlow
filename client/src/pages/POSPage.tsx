@@ -9,6 +9,7 @@ import type { CashRegister, CreditAccount, Product } from "../types";
 import ProductSearch from "../components/pos/ProductSearch";
 import Cart from "../components/pos/Cart";
 import PaymentModal from "../components/pos/PaymentModal";
+import WeightInputModal from "../components/pos/WeightInputModal";
 import Modal from "../components/ui/Modal";
 import Alert from "../components/ui/Alert";
 import toast from "react-hot-toast";
@@ -19,6 +20,7 @@ function POSContent() {
   const [cashRegister, setCashRegister] = useState<CashRegister | null>(null);
   const [creditAccounts, setCreditAccounts] = useState<CreditAccount[]>([]);
   const [paymentOpen, setPaymentOpen] = useState(false);
+  const [weightProduct, setWeightProduct] = useState<Product | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,17 +49,23 @@ function POSContent() {
   }, [user]);
 
   useBarcodeScanner({
-    enabled: !paymentOpen,
+    enabled: !paymentOpen && !weightProduct,
     onScan: async (barcode) => {
       const data = await findProductByBarcode(barcode);
 
       if (data) {
-        if (data.stock_quantity <= 0) {
-          toast.error(`Sin stock: ${data.name}`);
+        const product = data as Product;
+        if (product.sell_by_weight) {
+          setWeightProduct(product);
+          toast.success(`${product.name} — ingresá el peso`);
           return;
         }
-        addItem(data as Product);
-        toast.success(`${data.name} agregado`);
+        if (product.stock_quantity <= 0) {
+          toast.error(`Sin stock: ${product.name}`);
+          return;
+        }
+        addItem(product);
+        toast.success(`${product.name} agregado`);
       } else {
         toast.error(`Producto no encontrado: ${barcode}`);
       }
@@ -122,6 +130,16 @@ function POSContent() {
           </div>
         )}
       </div>
+
+      <WeightInputModal
+        open={weightProduct !== null}
+        product={weightProduct}
+        onConfirm={(product, weight) => {
+          addItem(product, weight);
+          setWeightProduct(null);
+        }}
+        onClose={() => setWeightProduct(null)}
+      />
 
       <Modal
         open={paymentOpen}

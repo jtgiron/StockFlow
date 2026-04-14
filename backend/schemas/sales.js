@@ -2,7 +2,7 @@ import { z } from "zod/v4";
 
 const saleItemSchema = z.object({
   product_id: z.number({ error: "product_id debe ser un número" }).int().positive(),
-  quantity: z.number({ error: "quantity debe ser un número" }).int().min(1, "La cantidad debe ser al menos 1"),
+  quantity: z.number({ error: "quantity debe ser un número" }).positive("La cantidad debe ser mayor a 0"),
 });
 
 const salePaymentSchema = z.object({

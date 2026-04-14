@@ -38,12 +38,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems((prev) => {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
+        // For weight products, replace the quantity instead of accumulating
+        const newQty = product.sell_by_weight
+          ? quantity
+          : existing.quantity + quantity;
         return prev.map((item) =>
           item.product.id === product.id
             ? {
                 ...item,
-                quantity: item.quantity + quantity,
-                subtotal: (item.quantity + quantity) * item.unit_price,
+                quantity: newQty,
+                subtotal: newQty * item.unit_price,
               }
             : item,
         );

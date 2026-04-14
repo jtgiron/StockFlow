@@ -33,6 +33,7 @@ export default function ProductForm({
     min_stock_alert: product?.min_stock_alert?.toString() ?? "5",
     is_active: product?.is_active ?? true,
     image_url: product?.image_url ?? "",
+    sell_by_weight: product?.sell_by_weight ?? false,
   });
 
   useEffect(() => {
@@ -48,6 +49,7 @@ export default function ProductForm({
         min_stock_alert: product.min_stock_alert?.toString() ?? "5",
         is_active: product.is_active ?? true,
         image_url: product.image_url ?? "",
+        sell_by_weight: product.sell_by_weight ?? false,
       });
     }
   }, [product]);
@@ -73,6 +75,7 @@ export default function ProductForm({
       min_stock_alert: Number(form.min_stock_alert),
       is_active: form.is_active,
       image_url: form.image_url || null,
+      sell_by_weight: form.sell_by_weight,
     });
     setLoading(false);
     if (ok) onCancel();
@@ -133,22 +136,37 @@ export default function ProductForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Input
-          label="Stock actual"
-          type="number"
-          min="0"
-          value={form.stock_quantity}
-          onChange={(e) => updateField("stock_quantity", e.target.value)}
+      <div className="flex items-center gap-2">
+        <input
+          type="checkbox"
+          id="sell_by_weight"
+          checked={form.sell_by_weight}
+          onChange={(e) => updateField("sell_by_weight", e.target.checked)}
+          className="rounded border-surface-600 bg-surface-800 text-amber-500 focus:ring-amber-500/40"
         />
-        <Input
-          label="Alerta stock mínimo"
-          type="number"
-          min="0"
-          value={form.min_stock_alert}
-          onChange={(e) => updateField("min_stock_alert", e.target.value)}
-        />
+        <label htmlFor="sell_by_weight" className="text-base text-surface-300">
+          Se vende por peso (kg)
+        </label>
       </div>
+
+      {!form.sell_by_weight && (
+        <div className="grid grid-cols-2 gap-4">
+          <Input
+            label="Stock actual"
+            type="number"
+            min="0"
+            value={form.stock_quantity}
+            onChange={(e) => updateField("stock_quantity", e.target.value)}
+          />
+          <Input
+            label="Alerta stock mínimo"
+            type="number"
+            min="0"
+            value={form.min_stock_alert}
+            onChange={(e) => updateField("min_stock_alert", e.target.value)}
+          />
+        </div>
+      )}
 
       <div className="flex items-center gap-2">
         <input

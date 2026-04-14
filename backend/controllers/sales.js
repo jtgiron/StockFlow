@@ -26,7 +26,7 @@ export const createSale = async (req, res, next) => {
       for (const item of items) {
         // Verify product exists and get authoritative price
         const productResult = await txQuery(
-          "SELECT id, stock_quantity, name, sell_price FROM products WHERE id = $1",
+          "SELECT id, stock_quantity, name, sell_price, sell_by_weight FROM products WHERE id = $1",
           [item.product_id],
         );
         if (productResult.rows.length === 0) {
@@ -34,13 +34,20 @@ export const createSale = async (req, res, next) => {
         }
 
         const product = productResult.rows[0];
+        const isByWeight = product.sell_by_weight === true;
         const qty = Number(item.quantity);
-        if (!Number.isInteger(qty) || qty < 1) {
-          throw new AppError(400, `Cantidad inválida para "${product.name}"`);
-        }
 
-        if (product.stock_quantity < qty) {
-          throw new AppError(400, `Stock insuficiente para "${product.name}"`);
+        if (isByWeight) {
+          if (qty <= 0) {
+            throw new AppError(400, `Peso inválido para "${product.name}"`);
+          }
+        } else {
+          if (!Number.isInteger(qty) || qty < 1) {
+            throw new AppError(400, `Cantidad inválida para "${product.name}"`);
+          }
+          if (product.stock_quantity < qty) {
+            throw new AppError(400, `Stock insuficiente para "${product.name}"`);
+          }
         }
 
         // Always use authoritative price from DB — never trust client-sent prices
@@ -54,6 +61,7 @@ export const createSale = async (req, res, next) => {
           unitPrice,
           subtotal,
           productName: product.name,
+          isByWeight,
         });
       }
 
@@ -73,18 +81,19 @@ export const createSale = async (req, res, next) => {
           [sale.id, d.product_id, d.quantity, d.unitPrice, d.subtotal],
         );
 
-        // Deduct stock
-        await txQuery(
-          "UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = NOW() WHERE id = $2",
-          [d.quantity, d.product_id],
-        );
+        // Skip stock deduction and movement for sell-by-weight products
+        if (!d.isByWeight) {
+          await txQuery(
+            "UPDATE products SET stock_quantity = stock_quantity - $1, updated_at = NOW() WHERE id = $2",
+            [d.quantity, d.product_id],
+          );
 
-        // Record stock movement
-        await txQuery(
-          `INSERT INTO stock_movements (product_id, movement_type, quantity, reason, user_id)
-           VALUES ($1, 'exit', $2, $3, $4)`,
-          [d.product_id, d.quantity, `Venta #${sale.id}`, userId],
-        );
+          await txQuery(
+            `INSERT INTO stock_movements (product_id, movement_type, quantity, reason, user_id)
+             VALUES ($1, 'exit', $2, $3, $4)`,
+            [d.product_id, d.quantity, `Venta #${sale.id}`, userId],
+          );
+        }
       }
 
       // Validate payments total matches sale total
