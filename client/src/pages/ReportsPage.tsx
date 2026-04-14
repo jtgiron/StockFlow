@@ -316,8 +316,8 @@ function VentasTab({
                 />
                 <Tooltip
                   {...tooltipStyle}
-                  formatter={(value: number) => [
-                    formatCurrency(value),
+                  formatter={(value) => [
+                    formatCurrency(Number(value)),
                     "Ingresos",
                   ]}
                 />
@@ -415,8 +415,8 @@ function ProductosTab({
                   />
                   <Tooltip
                     {...tooltipStyle}
-                    formatter={(value: number) => [
-                      formatCurrency(value),
+                    formatter={(value) => [
+                      formatCurrency(Number(value)),
                       "Ingreso",
                     ]}
                   />
@@ -469,8 +469,8 @@ function PagosTab({
                     outerRadius={88}
                     paddingAngle={3}
                     cornerRadius={6}
-                    label={({ label, percent }) =>
-                      `${label}: ${((percent ?? 0) * 100).toFixed(0)}%`
+                    label={({ name, percent }) =>
+                      `${name}: ${((percent ?? 0) * 100).toFixed(0)}%`
                     }
                     labelLine={false}
                   >
@@ -480,8 +480,8 @@ function PagosTab({
                   </Pie>
                   <Tooltip
                     {...tooltipStyle}
-                    formatter={(value: number) => [
-                      formatCurrency(value),
+                    formatter={(value) => [
+                      formatCurrency(Number(value)),
                       "Total",
                     ]}
                   />
@@ -634,9 +634,9 @@ function GananciasTab({
                 />
                 <Tooltip
                   {...tooltipStyle}
-                  formatter={(value: number, name: string) => [
-                    formatCurrency(value),
-                    name,
+                  formatter={(value, name) => [
+                    formatCurrency(Number(value)),
+                    String(name),
                   ]}
                 />
                 <Legend
