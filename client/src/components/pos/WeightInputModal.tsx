@@ -12,10 +12,10 @@ interface WeightInputModalProps {
 }
 
 const PRESETS = [
-  { label: "100g", value: 0.1 },
-  { label: "250g", value: 0.25 },
-  { label: "500g", value: 0.5 },
-  { label: "1 kg", value: 1 },
+  { label: "100g", value: 100 },
+  { label: "250g", value: 250 },
+  { label: "500g", value: 500 },
+  { label: "1 kg", value: 1000 },
 ];
 
 export default function WeightInputModal({
@@ -26,13 +26,14 @@ export default function WeightInputModal({
 }: WeightInputModalProps) {
   const [weight, setWeight] = useState("");
 
-  const numericWeight = parseFloat(weight) || 0;
+  const grams = parseFloat(weight) || 0;
+  const weightInKg = grams / 1000;
   const unitPrice = product ? Number(product.sell_price) : 0;
-  const subtotal = unitPrice * numericWeight;
+  const subtotal = unitPrice * weightInKg;
 
   function handleConfirm() {
-    if (!product || numericWeight <= 0) return;
-    onConfirm(product, numericWeight);
+    if (!product || grams <= 0) return;
+    onConfirm(product, weightInKg);
     setWeight("");
     onClose();
   }
@@ -57,13 +58,13 @@ export default function WeightInputModal({
 
         <div className="flex flex-col gap-1.5">
           <label htmlFor="weight-input" className="text-base font-medium text-surface-400">
-            Peso (kg)
+            Peso (gramos)
           </label>
           <input
             id="weight-input"
             type="number"
-            step="0.001"
-            min="0.001"
+            step="1"
+            min="1"
             value={weight}
             onChange={(e) => setWeight(e.target.value)}
             onKeyDown={(e) => {
@@ -72,7 +73,7 @@ export default function WeightInputModal({
                 handleConfirm();
               }
             }}
-            placeholder="0.000"
+            placeholder="0"
             autoFocus
             className="w-full rounded-lg border border-surface-700 bg-surface-900 px-4 py-3 text-2xl font-mono text-center text-surface-100 placeholder:text-surface-600 outline-none transition-all focus:ring-2 focus:ring-amber-500/40 focus:border-amber-500"
           />
@@ -91,7 +92,7 @@ export default function WeightInputModal({
           ))}
         </div>
 
-        {numericWeight > 0 && (
+        {grams > 0 && (
           <div className="flex justify-between items-center py-3 px-4 bg-surface-800/50 rounded-lg border border-surface-700/50">
             <span className="text-base text-surface-400">Subtotal</span>
             <span className="text-xl font-bold text-amber-400">{formatCurrency(subtotal)}</span>
@@ -102,7 +103,7 @@ export default function WeightInputModal({
           <Button variant="secondary" onClick={handleClose}>
             Cancelar
           </Button>
-          <Button onClick={handleConfirm} disabled={numericWeight <= 0}>
+          <Button onClick={handleConfirm} disabled={grams <= 0}>
             Agregar
           </Button>
         </div>
