@@ -75,9 +75,14 @@ export async function requestCAE(saleId, totalAmount) {
     const detResp = resp.FeDetResp?.FECAEDetResponse?.[0];
 
     if (cabResp.Resultado !== 'A') {
+      console.error('[ARCA] Full rejection response:', JSON.stringify(resp, null, 2));
       const obs = detResp?.Observaciones?.Obs
         ?.map((o) => `${o.Code}: ${o.Msg}`)
-        .join('; ') || 'Unknown rejection';
+        .join('; ')
+        || resp?.Errors?.Err
+          ?.map((e) => `${e.Code}: ${e.Msg}`)
+          .join('; ')
+        || 'Unknown rejection';
       throw new Error(`[ARCA] Factura rechazada: ${obs}`);
     }
 
