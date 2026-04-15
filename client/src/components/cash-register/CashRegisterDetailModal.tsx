@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
+import toast from "react-hot-toast";
 import { api } from "../../services/api";
+import { useAuth } from "../../contexts/AuthContext";
 import { formatCurrency, formatTime } from "../../utils/formatters";
 import Modal from "../ui/Modal";
 import Table from "../ui/Table";
+import InvoiceBadge from "../sales/InvoiceBadge";
 import type { Sale, PaymentMethod } from "../../types";
 
 const PAYMENT_LABELS: Record<PaymentMethod, string> = {
@@ -22,8 +25,36 @@ export default function CashRegisterDetailModal({
   open,
   onClose,
 }: Props) {
+  const { isAdmin } = useAuth();
   const [sales, setSales] = useState<Sale[]>([]);
   const [loading, setLoading] = useState(false);
+
+  async function handleRetryInvoice(saleId: number) {
+    try {
+      const result = await api.post<{
+        invoice_status: string;
+        invoice_cae: string;
+        invoice_number: number;
+      }>(`/sales/${saleId}/retry-invoice`, {});
+      toast.success("Factura emitida correctamente");
+      setSales((prev) =>
+        prev.map((s) =>
+          s.id === saleId
+            ? {
+                ...s,
+                invoice_status: "success" as const,
+                invoice_cae: result.invoice_cae,
+                invoice_number: result.invoice_number,
+              }
+            : s,
+        ),
+      );
+    } catch (err) {
+      const msg =
+        err instanceof Error ? err.message : "Error al reintentar factura";
+      toast.error(msg);
+    }
+  }
 
   useEffect(() => {
     if (!open || !cashRegisterId) return;
@@ -73,6 +104,20 @@ export default function CashRegisterDetailModal({
           .join(", ");
       },
       className: "w-32",
+    },
+    {
+      header: "Factura",
+      accessor: (s: Sale) => (
+        <InvoiceBadge
+          status={s.invoice_status}
+          cae={s.invoice_cae}
+          invoiceNumber={s.invoice_number}
+          caeExpiry={s.invoice_cae_expiry}
+          isAdmin={isAdmin}
+          onRetry={() => handleRetryInvoice(s.id)}
+        />
+      ),
+      className: "w-40",
     },
   ];
 

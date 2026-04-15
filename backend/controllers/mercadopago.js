@@ -5,6 +5,8 @@ import { query } from "../database.js";
 import { withTransaction } from "../utils/db.js";
 import { AppError } from "../utils/errors.js";
 import { getActiveMerchant, getMerchantById } from "../utils/mpTokens.js";
+import { emitInvoice } from "../services/arca/index.js";
+import { getArcaConfig } from "../services/arca/config.js";
 
 const MP_API_BASE = "https://api.mercadopago.com";
 
@@ -354,6 +356,8 @@ async function createSaleFromPendingOrder(externalRef, mpPaymentId) {
 
   const pendingOrder = claimResult.rows[0];
   const items = pendingOrder.items;
+  let createdSaleId = null;
+  let createdTotal = 0;
 
   try {
     await withTransaction(async (txQuery) => {
@@ -395,6 +399,8 @@ async function createSaleFromPendingOrder(externalRef, mpPaymentId) {
         [pendingOrder.cash_register_id, pendingOrder.user_id, totalAmount],
       );
       const sale = saleResult.rows[0];
+      createdSaleId = sale.id;
+      createdTotal = totalAmount;
 
       // Insert items & update stock
       for (const d of itemsData) {
@@ -432,6 +438,13 @@ async function createSaleFromPendingOrder(externalRef, mpPaymentId) {
         `MP webhook: sale #${sale.id} created for ref=${externalRef}, mp_payment_id=${mpPaymentId}`,
       );
     });
+
+    // Fire-and-forget ARCA invoice for MP sale
+    if (createdSaleId && getArcaConfig().enabled) {
+      emitInvoice(createdSaleId, createdTotal).catch((err) => {
+        console.error(`[ARCA] Unhandled error in emitInvoice for MP sale #${createdSaleId}:`, err);
+      });
+    }
   } catch (err) {
     console.error(
       `MP webhook: error creating sale for ref=${externalRef}:`,

@@ -8,6 +8,7 @@ dotenv.config({ path: join(__dirname, ".env") });
 
 import { createApp } from "./app.js";
 import { getPool } from "./database.js";
+import { startArcaSweep } from "./services/arca/sweep.js";
 
 const PORT = process.env.PORT ?? 3000;
 
@@ -16,6 +17,8 @@ const app = createApp();
 const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
+
+startArcaSweep();
 
 // Graceful shutdown
 function shutdown(signal) {

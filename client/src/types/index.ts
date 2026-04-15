@@ -70,6 +70,8 @@ export interface CashRegister {
 
 export type SaleStatus = "completed" | "cancelled" | "pending";
 
+export type InvoiceStatus = "disabled" | "pending" | "success" | "failed";
+
 export interface Sale {
   id: number;
   cash_register_id: number;
@@ -77,6 +79,13 @@ export interface Sale {
   total_amount: number;
   status: SaleStatus;
   created_at: string;
+  invoice_status?: InvoiceStatus | null;
+  invoice_cae?: string | null;
+  invoice_cae_expiry?: string | null;
+  invoice_number?: number | null;
+  invoice_error?: string | null;
+  invoice_retry_count?: number;
+  invoice_emitted_at?: string | null;
   sale_items?: SaleItem[];
   sale_payments?: SalePayment[];
   profile?: Profile;

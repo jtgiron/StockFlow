@@ -2,6 +2,8 @@
 import { withTransaction } from "../utils/db.js";
 import { query } from "../database.js";
 import { AppError } from "../utils/errors.js";
+import { emitInvoice } from "../services/arca/index.js";
+import { getArcaConfig } from "../services/arca/config.js";
 
 export const createSale = async (req, res, next) => {
   try {
@@ -174,6 +176,13 @@ export const createSale = async (req, res, next) => {
     });
 
     res.status(201).json(result);
+
+    // Fire-and-forget ARCA invoice
+    if (getArcaConfig().enabled) {
+      emitInvoice(result.id, Number(result.total_amount)).catch((err) => {
+        console.error(`[ARCA] Unhandled error in emitInvoice for sale #${result.id}:`, err);
+      });
+    }
   } catch (err) {
     next(err);
   }
@@ -245,6 +254,45 @@ export const getSales = async (req, res, next) => {
     }
 
     res.json({ items: result.rows, total });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const retryInvoice = async (req, res, next) => {
+  try {
+    if (req.user.role !== 'admin') {
+      throw new AppError(403, 'Solo los administradores pueden reintentar facturas');
+    }
+
+    const saleId = parseInt(req.params.id);
+    const saleResult = await query(
+      'SELECT id, total_amount, invoice_status FROM sales WHERE id = $1',
+      [saleId]
+    );
+
+    if (saleResult.rows.length === 0) throw new AppError(404, 'Venta no encontrada');
+
+    const sale = saleResult.rows[0];
+
+    if (sale.invoice_status === 'success') {
+      throw new AppError(409, 'La venta ya tiene factura emitida');
+    }
+    if (sale.invoice_status === 'disabled') {
+      throw new AppError(422, 'La facturación ARCA no está habilitada');
+    }
+
+    const result = await emitInvoice(saleId, Number(sale.total_amount));
+
+    if (result.success) {
+      res.json({
+        invoice_status: 'success',
+        invoice_cae: result.cae,
+        invoice_number: result.invoiceNumber,
+      });
+    } else {
+      res.status(422).json({ error: result.error || 'Error de ARCA desconocido' });
+    }
   } catch (err) {
     next(err);
   }
