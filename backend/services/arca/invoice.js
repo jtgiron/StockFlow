@@ -31,7 +31,6 @@ export async function requestCAE(saleId, totalAmount) {
     const lastNumber = await getLastVoucherNumber(wsfeClient, auth, config.ptoVenta, cbteTipo);
     const nextNumber = lastNumber + 1;
 
-    wsfeClient.on('request', (xml) => console.log('[ARCA] SOAP request:', xml));
     const [result] = await wsfeClient.FECAESolicitarAsync({
       Auth: auth,
       FeCAEReq: {
@@ -54,7 +53,7 @@ export async function requestCAE(saleId, totalAmount) {
             ImpOpEx: 0,
             ImpIVA: 0,
             ImpTrib: 0,
-            CondicionIVAReceptor: 5,
+            CondicionIVAReceptorId: 5,
             MonId: 'PES',
             MonCotiz: 1,
           }],
