@@ -14,7 +14,7 @@ const salePaymentSchema = z.object({
 });
 
 export const createSaleSchema = z.object({
-  cash_register_id: z.string({ error: "cash_register_id es obligatorio" }).min(1),
+  cash_register_id: z.number({ error: "cash_register_id es obligatorio" }).int().positive(),
   items: z.array(saleItemSchema).min(1, "Se requiere al menos un item"),
   payments: z.array(salePaymentSchema).min(1, "Se requiere al menos un pago"),
   credit_account_id: z.number().int().positive().optional(),
