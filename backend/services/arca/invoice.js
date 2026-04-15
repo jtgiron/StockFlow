@@ -62,6 +62,15 @@ export async function requestCAE(saleId, totalAmount) {
     });
 
     const resp = result.FECAESolicitarResult;
+
+    // AFIP may return top-level Errors before FeCabResp exists
+    if (!resp?.FeCabResp) {
+      const errs = resp?.Errors?.Err
+        ?.map((e) => `${e.Code}: ${e.Msg}`)
+        .join('; ') || JSON.stringify(result);
+      throw new Error(`[ARCA] Error de servicio: ${errs}`);
+    }
+
     const cabResp = resp.FeCabResp;
     const detResp = resp.FeDetResp?.FECAEDetResponse?.[0];
 
