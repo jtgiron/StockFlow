@@ -53,6 +53,7 @@ export async function requestCAE(saleId, totalAmount) {
             ImpOpEx: 0,
             ImpIVA: 0,
             ImpTrib: 0,
+            CondicionIVAReceptor: 5,
             MonId: 'PES',
             MonCotiz: 1,
           }],
