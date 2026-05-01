@@ -22,4 +22,20 @@ export async function withTransaction(callback) {
   }
 }
 
+// pg_advisory_lock is session-scoped: lock and unlock must run on the same
+// connection or the unlock is a no-op. Pin a pool client for the critical section.
+export async function withAdvisoryLock(lockKey, callback) {
+  const client = await getPool().connect();
+  try {
+    await client.query("SELECT pg_advisory_lock($1)", [lockKey]);
+    try {
+      return await callback();
+    } finally {
+      await client.query("SELECT pg_advisory_unlock($1)", [lockKey]);
+    }
+  } finally {
+    client.release();
+  }
+}
+
 export { dbQuery as query };

@@ -1,9 +1,9 @@
-import { query } from '../../database.js';
+import { withAdvisoryLock } from '../../utils/db.js';
 import { getWsfeClient } from './client.js';
 import { getValidToken } from './token.js';
 import { getArcaConfig } from './config.js';
 
-const LOCK_KEY = 20250415;
+const INVOICE_LOCK_KEY = 20250415;
 
 async function getLastVoucherNumber(wsfeClient, auth, ptoVta, cbteTipo) {
   const [result] = await wsfeClient.FECompUltimoAutorizadoAsync({
@@ -12,6 +12,12 @@ async function getLastVoucherNumber(wsfeClient, auth, ptoVta, cbteTipo) {
     CbteTipo: cbteTipo,
   });
   return result.FECompUltimoAutorizadoResult.CbteNro;
+}
+
+// WSFE returns CAE expiry as YYYYMMDD; normalize to YYYY-MM-DD for DATE column.
+function formatCaeExpiry(yyyymmdd) {
+  if (typeof yyyymmdd !== 'string' || !/^\d{8}$/.test(yyyymmdd)) return null;
+  return `${yyyymmdd.slice(0, 4)}-${yyyymmdd.slice(4, 6)}-${yyyymmdd.slice(6, 8)}`;
 }
 
 export async function requestCAE(saleId, totalAmount) {
@@ -25,9 +31,7 @@ export async function requestCAE(saleId, totalAmount) {
   const cbteTipo = 11; // Factura C
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 
-  await query('SELECT pg_advisory_lock($1)', [LOCK_KEY]);
-
-  try {
+  return withAdvisoryLock(INVOICE_LOCK_KEY, async () => {
     const lastNumber = await getLastVoucherNumber(wsfeClient, auth, config.ptoVenta, cbteTipo);
     const nextNumber = lastNumber + 1;
 
@@ -88,10 +92,8 @@ export async function requestCAE(saleId, totalAmount) {
 
     return {
       cae: detResp.CAE,
-      caeExpiry: detResp.CAEFchVto,
+      caeExpiry: formatCaeExpiry(detResp.CAEFchVto),
       invoiceNumber: nextNumber,
     };
-  } finally {
-    await query('SELECT pg_advisory_unlock($1)', [LOCK_KEY]);
-  }
+  });
 }
