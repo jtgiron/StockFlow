@@ -7,3 +7,4 @@
 !.env.example
 .vercel
 .env*.local
+.atl/

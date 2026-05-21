@@ -1,0 +1,18 @@
+{
+  "files": {
+    "src/types/index.ts": {
+      "modifiedRanges": [
+        {
+          "start": 188,
+          "end": 188
+        }
+      ],
+      "importsChanged": false,
+      "lastEdit": "2026-05-14T15:11:32.402Z"
+    }
+  },
+  "turnCycles": 0,
+  "maxCycles": 3,
+  "lastUpdated": "2026-05-14T15:11:32.402Z",
+  "sessionId": "lens-mp5krwlm-015d3ed2"
+}

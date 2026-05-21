@@ -75,7 +75,6 @@ export async function requestCAE(saleId, totalAmount) {
     const detResp = resp.FeDetResp?.FECAEDetResponse?.[0];
 
     if (cabResp.Resultado !== 'A') {
-      console.error('[ARCA] Full rejection response:', JSON.stringify(resp, null, 2));
       const obs = detResp?.Observaciones?.Obs
         ?.map((o) => `${o.Code}: ${o.Msg}`)
         .join('; ')

@@ -3,7 +3,12 @@
     "allow": [
       "Bash(CI=true pnpm install)",
       "Bash(xargs ls:*)",
-      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")"
+      "Bash(node -e \"console.log\\(require\\('crypto'\\).randomBytes\\(64\\).toString\\('hex'\\)\\)\")",
+      "mcp__plugin_engram_engram__mem_save",
+      "Bash(node:*)",
+      "mcp__plugin_engram_engram__mem_judge",
+      "Bash(pnpm add:*)",
+      "Bash(npx tsc:*)"
     ]
   }
 }

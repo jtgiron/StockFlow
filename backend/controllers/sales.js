@@ -10,6 +10,13 @@ export const createSale = async (req, res, next) => {
     const userId = req.user.id;
     const { cash_register_id, items, payments, credit_account_id } = req.body;
 
+    if (payments.some((payment) => payment.payment_method === "mercadopago")) {
+      throw new AppError(
+        400,
+        "Las ventas con Mercado Pago deben iniciarse desde el flujo QR de Mercado Pago. Los pagos mixtos con Mercado Pago no estan habilitados todavia.",
+      );
+    }
+
     const result = await withTransaction(async (txQuery) => {
       // Verify cash register is open
       const regCheck = await txQuery(

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, type FormEvent } from "react";
+import toast from "react-hot-toast";
 import { useCart } from "../../contexts/CartContext";
 import { formatCurrency } from "../../utils/formatters";
 import { createMpOrder, getMpOrderStatus, cancelMpOrder } from "../../hooks/useSales";
@@ -65,6 +66,23 @@ export default function PaymentModal({
     const numAmount = Number(amount);
     if (numAmount <= 0) return;
 
+    const hasMercadoPago = payments.some((p) => p.method === "mercadopago");
+
+    if (method === "mercadopago" && payments.length > 0) {
+      toast.error("Mercado Pago no admite pagos mixtos por ahora");
+      return;
+    }
+
+    if (method !== "mercadopago" && hasMercadoPago) {
+      toast.error("No podés mezclar Mercado Pago con otros medios por ahora");
+      return;
+    }
+
+    if (method === "mercadopago" && Math.abs(numAmount - remaining) > 0.01) {
+      toast.error("El pago con Mercado Pago debe cubrir el total pendiente");
+      return;
+    }
+
     addPayment({ method, amount: numAmount });
     const newRemaining = Math.max(0, total - totalPaid - numAmount);
     setAmount(newRemaining.toFixed(2));
@@ -77,6 +95,14 @@ export default function PaymentModal({
     const hasMpPayment = payments.some((p) => p.method === "mercadopago");
 
     if (hasMpPayment) {
+      if (payments.length !== 1) {
+        toast.error("Mercado Pago no admite pagos mixtos por ahora");
+        return;
+      }
+      if (Math.abs(payments[0].amount - total) > 0.01) {
+        toast.error("El pago con Mercado Pago debe cubrir el total de la venta");
+        return;
+      }
       await startMpFlow();
       return;
     }

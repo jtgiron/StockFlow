@@ -1,0 +1,26 @@
+{
+    "paging": {
+        "total": 1,
+        "offset": 0,
+        "limit": 50
+    },
+    "results": [
+        {
+            "id": "75263243",
+            "name": "Kiosco Pato",
+            "date_creation": "2026-03-28T15:18:19.588Z",
+            "location": {
+                "address_line": "Gral. Brig. Manuel Calderon 254, Almirante Brown, Buenos Aires, Argentina",
+                "reference": "Near to Estetica Mayra",
+                "latitude": -34.87804236474578,
+                "longitude": -58.347725484128304,
+                "id": "TUxBQ0FMTWlyYW50",
+                "type": "city",
+                "city": "Almirante Brown",
+                "state_id": "AR-B",
+                "zip_code": "B1848ZAW"
+            },
+            "external_id": "KP001"
+        }
+    ]
+}

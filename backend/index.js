@@ -7,8 +7,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 dotenv.config({ path: join(__dirname, ".env") });
 
 import { createApp } from "./app.js";
+import { validateRuntimeConfig } from "./config/runtime.js";
 import { getPool } from "./database.js";
 import { startArcaSweep } from "./services/arca/sweep.js";
+
+validateRuntimeConfig();
 
 const PORT = process.env.PORT ?? 3000;
 
