@@ -13,7 +13,7 @@ function buildLoginTicketRequest() {
   // AFIP requires uniqueId to be unique within ticket validity. Two requests
   // in the same second collide if we use epoch seconds, so use a random
   // 31-bit positive integer (fits within int32 signed).
-  const uniqueId = crypto.randomInt(0, 0x7fffffff);
+  const uniqueId = crypto.randomInt(1, 0x7fffffff);
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -68,10 +68,14 @@ async function requestToken(config) {
     throw new Error(`[ARCA] WSAA response missing token/sign: ${responseXml.slice(0, 200)}`);
   }
 
+  if (!expirationMatch) {
+    throw new Error('[ARCA] WSAA response missing expirationTime — cannot cache token safely');
+  }
+
   return {
     token: tokenMatch[1],
     sign: signMatch[1],
-    expirationTime: expirationMatch ? expirationMatch[1] : null,
+    expirationTime: expirationMatch[1],
   };
 }
 

@@ -16,17 +16,18 @@ export function startArcaSweep() {
 
   console.log('[ARCA] Background retry sweep started (interval: 5 min)');
 
-  // Run once at startup so process restarts pick up failed/stuck invoices
-  // immediately instead of waiting a full interval.
-  runSweep().catch((err) => console.error('[ARCA] Initial sweep error:', err));
-
-  setInterval(async () => {
+  async function scheduleNext() {
     try {
       await runSweep();
     } catch (err) {
       console.error('[ARCA] Sweep error:', err);
     }
-  }, SWEEP_INTERVAL_MS);
+    setTimeout(scheduleNext, SWEEP_INTERVAL_MS);
+  }
+
+  // Run once at startup so process restarts pick up failed/stuck invoices
+  // immediately instead of waiting a full interval.
+  scheduleNext();
 }
 
 async function runSweep() {
@@ -52,11 +53,12 @@ async function runSweep() {
     `SELECT id, total_amount
      FROM sales
      WHERE invoice_status = 'pending'
+       AND invoice_retry_count < $1
        AND invoice_last_attempt_at IS NOT NULL
-       AND invoice_last_attempt_at < NOW() - ($1 * INTERVAL '1 minute')
+       AND invoice_last_attempt_at < NOW() - ($2 * INTERVAL '1 minute')
      ORDER BY invoice_last_attempt_at ASC
-     LIMIT $2`,
-    [STUCK_PENDING_MINUTES, BATCH_SIZE]
+     LIMIT $3`,
+    [MAX_RETRIES, STUCK_PENDING_MINUTES, BATCH_SIZE]
   );
 
   const rows = [...failed.rows, ...stuck.rows];
