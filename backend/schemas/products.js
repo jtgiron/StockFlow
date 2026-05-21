@@ -12,7 +12,10 @@ export const createProductSchema = z.object({
   stock_quantity: z.number().int().nonnegative("El stock debe ser >= 0").default(0),
   min_stock_alert: z.number().int().nonnegative("El stock mínimo debe ser >= 0").default(0),
   is_active: z.boolean().default(true),
-  image_url: z.string().trim().optional().nullable(),
+  image_url: z.string().trim().url("URL de imagen inválida").refine(
+    (url) => url.startsWith("https://") || url.startsWith("http://"),
+    "La URL de imagen debe usar http o https",
+  ).optional().nullable(),
   sell_by_weight: z.boolean().default(false),
 });
 

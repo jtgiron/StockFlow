@@ -9,6 +9,44 @@ import { emitInvoice } from "../services/arca/index.js";
 import { getArcaConfig } from "../services/arca/config.js";
 
 const MP_API_BASE = "https://api.mercadopago.com";
+const DEFAULT_MP_ORDER_TIMEOUT_MINUTES = 15;
+
+function getMpOrderTimeoutMs() {
+  const configuredMinutes = Number(process.env.MP_ORDER_TIMEOUT_MINUTES);
+  const minutes = Number.isFinite(configuredMinutes) && configuredMinutes > 0
+    ? configuredMinutes
+    : DEFAULT_MP_ORDER_TIMEOUT_MINUTES;
+  return minutes * 60 * 1000;
+}
+
+function isPendingOrderExpired(createdAt) {
+  return Date.now() - new Date(createdAt).getTime() >= getMpOrderTimeoutMs();
+}
+
+function getResolvedOrderStatus(order) {
+  if (order.status === "pending" && isPendingOrderExpired(order.created_at)) {
+    return "expired";
+  }
+  return order.status;
+}
+
+function buildOrderStatusResponse(order) {
+  return {
+    ...order,
+    status: getResolvedOrderStatus(order),
+    expires_at: new Date(new Date(order.created_at).getTime() + getMpOrderTimeoutMs()).toISOString(),
+  };
+}
+
+function extractResourceId(resource) {
+  if (!resource) return null;
+  const normalized = String(resource).trim();
+  if (!normalized) return null;
+  if (!normalized.startsWith("http")) return normalized;
+
+  const pieces = normalized.split("/").filter(Boolean);
+  return pieces.at(-1) || null;
+}
 
 // POST /api/mp/create-order — Instore QR static model
 export const createOrder = async (req, res, next) => {
@@ -169,34 +207,44 @@ export const webhook = async (req, res) => {
   try {
     const webhookSecret = process.env.MP_WEBHOOK_SECRET;
 
-    // Validate HMAC signature if secret is configured
+    // Validate HMAC signature when secret is configured
     if (webhookSecret) {
       const xSignature = req.headers["x-signature"];
       const xRequestId = req.headers["x-request-id"];
 
-      if (xSignature) {
-        const parts = xSignature.split(",");
-        let ts = null;
-        let hash = null;
-        for (const part of parts) {
-          const [key, value] = part.split("=", 2).map((s) => s.trim());
-          if (key === "ts") ts = value;
-          if (key === "v1") hash = value;
-        }
+      // Reject requests without signature when secret is configured
+      if (!xSignature) {
+        console.warn("MP webhook: missing x-signature header (secret is configured)");
+        return res.status(401).json({ message: "Missing signature" });
+      }
 
-        if (ts && hash) {
-          const dataId = (req.query["data.id"] || req.query["id"] || "").toString();
-          const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
-          const expectedHash = crypto
-            .createHmac("sha256", webhookSecret)
-            .update(manifest)
-            .digest("hex");
+      const parts = xSignature.split(",");
+      let ts = null;
+      let hash = null;
+      for (const part of parts) {
+        const [key, value] = part.split("=", 2).map((s) => s.trim());
+        if (key === "ts") ts = value;
+        if (key === "v1") hash = value;
+      }
 
-          if (expectedHash !== hash) {
-            console.warn("MP webhook: HMAC mismatch");
-            return res.status(401).json({ message: "Invalid signature" });
-          }
-        }
+      if (!ts || !hash) {
+        console.warn("MP webhook: malformed x-signature header");
+        return res.status(401).json({ message: "Malformed signature" });
+      }
+
+      const dataId = (req.query["data.id"] || req.query["id"] || "").toString();
+      const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+      const expectedHash = crypto
+        .createHmac("sha256", webhookSecret)
+        .update(manifest)
+        .digest("hex");
+
+      // Timing-safe comparison to prevent timing attacks
+      const expectedBuf = Buffer.from(expectedHash, "utf8");
+      const receivedBuf = Buffer.from(hash, "utf8");
+      if (expectedBuf.length !== receivedBuf.length || !crypto.timingSafeEqual(expectedBuf, receivedBuf)) {
+        console.warn("MP webhook: HMAC mismatch");
+        return res.status(401).json({ message: "Invalid signature" });
       }
     }
 
@@ -233,10 +281,8 @@ export const webhook = async (req, res) => {
  * then creates the sale in our system.
  */
 async function processMerchantOrder(resourceUrl) {
-  // We need an access token to fetch the merchant_order from MP.
-  // Try to get it from the active merchant first. If the resource contains
-  // an external_reference, we'll resolve per-order later.
-  const accessToken = await resolveWebhookToken();
+  const merchantOrderId = extractResourceId(resourceUrl);
+  const accessToken = await resolveWebhookToken({ merchantOrderId });
   if (!accessToken) {
     console.error("MP webhook: no access token available to fetch merchant_order");
     return;
@@ -282,12 +328,51 @@ async function processMerchantOrder(resourceUrl) {
   await createSaleFromPendingOrder(externalRef, mpPaymentId);
 }
 
+async function findPendingOrderMerchantId({ merchantOrderId, externalReference }) {
+  if (merchantOrderId) {
+    const byOrderId = await query(
+      `SELECT merchant_id
+       FROM mp_pending_orders
+       WHERE mp_order_id = $1 AND merchant_id IS NOT NULL
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [merchantOrderId],
+    );
+    if (byOrderId.rows.length > 0) {
+      return byOrderId.rows[0].merchant_id;
+    }
+  }
+
+  if (externalReference) {
+    const byReference = await query(
+      `SELECT merchant_id
+       FROM mp_pending_orders
+       WHERE external_reference = $1 AND merchant_id IS NOT NULL
+       LIMIT 1`,
+      [externalReference],
+    );
+    if (byReference.rows.length > 0) {
+      return byReference.rows[0].merchant_id;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Resolve an access token for webhook processing.
- * Uses the active merchant's token.
+ * Prefers the merchant tied to the pending order, falls back to the active merchant.
  */
-async function resolveWebhookToken() {
+async function resolveWebhookToken({ merchantOrderId = null, externalReference = null } = {}) {
   try {
+    const merchantId = await findPendingOrderMerchantId({ merchantOrderId, externalReference });
+    if (merchantId) {
+      const merchant = await getMerchantById(merchantId);
+      if (merchant?.is_active) {
+        return merchant.mp_access_token;
+      }
+    }
+
     const merchant = await getActiveMerchant();
     return merchant.mp_access_token;
   } catch {
@@ -522,7 +607,7 @@ export const getOrderStatus = async (req, res, next) => {
       throw new AppError(404, "Orden no encontrada");
     }
 
-    res.json(result.rows[0]);
+    res.json(buildOrderStatusResponse(result.rows[0]));
   } catch (err) {
     next(err);
   }

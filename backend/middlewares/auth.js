@@ -20,6 +20,13 @@ export const authenticate = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid token payload" });
     }
 
+    // Reject refresh tokens — they must only be used at /api/auth/refresh
+    if (decoded.type === "refresh") {
+      return res
+        .status(401)
+        .json({ message: "Refresh tokens cannot be used for authentication" });
+    }
+
     const result = await query(
       "SELECT id, email, role, is_active FROM users WHERE id = $1 LIMIT 1",
       [decoded.id],

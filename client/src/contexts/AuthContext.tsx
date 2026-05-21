@@ -33,7 +33,6 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 interface LoginResponse {
   access_token: string;
-  refresh_token: string;
   user: Profile & { email: string };
 }
 
@@ -75,7 +74,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       api.setToken(data.access_token);
-      api.setRefreshToken(data.refresh_token);
+      // Refresh token is set as HttpOnly cookie by the server
       const profile = data.user;
       setState({
         user: { id: profile.id, email: profile.email ?? email },
@@ -92,8 +91,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    // Clear HttpOnly refresh cookie via server endpoint
+    try {
+      await api.post("/auth/logout");
+    } catch {
+      // Logout best-effort — clear local state regardless
+    }
     api.setToken(null);
-    api.setRefreshToken(null);
+    // Clean up any legacy refresh_token from localStorage
+    localStorage.removeItem("refresh_token");
     setState({ user: null, profile: null, loading: false, role: null });
   }
 

@@ -27,15 +27,6 @@ function setToken(token: string | null): void {
   else localStorage.removeItem("auth_token");
 }
 
-function getRefreshToken(): string | null {
-  return localStorage.getItem("refresh_token");
-}
-
-function setRefreshToken(token: string | null): void {
-  if (token) localStorage.setItem("refresh_token", token);
-  else localStorage.removeItem("refresh_token");
-}
-
 export class ApiError extends Error {
   status: number;
   constructor(status: number, message: string) {
@@ -47,25 +38,21 @@ export class ApiError extends Error {
 let refreshPromise: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
-  const rt = getRefreshToken();
-  if (!rt) return false;
-
   try {
+    // Refresh token is sent automatically via HttpOnly cookie
     const res = await fetch(`${API_URL}/auth/refresh`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ refresh_token: rt }),
+      credentials: "include",
     });
 
     if (!res.ok) {
       setToken(null);
-      setRefreshToken(null);
       return false;
     }
 
     const data = await res.json();
     setToken(data.access_token);
-    setRefreshToken(data.refresh_token);
     return true;
   } catch {
     return false;
@@ -86,16 +73,17 @@ async function request<T>(
   let res = await fetch(`${API_URL}${path}`, {
     method,
     headers,
+    credentials: "include",
     body:
       body != null
         ? JSON.stringify(transformKeys(body, toSnakeCase))
         : undefined,
   });
 
-  // Auto-refresh on 401
+  // Auto-refresh on 401 (refresh token is in HttpOnly cookie, sent automatically)
   if (
     res.status === 401 &&
-    getRefreshToken() &&
+    getToken() &&
     !path.includes("/auth/refresh")
   ) {
     if (!refreshPromise) {
@@ -113,6 +101,7 @@ async function request<T>(
       res = await fetch(`${API_URL}${path}`, {
         method,
         headers: newHeaders,
+        credentials: "include",
         body:
           body != null
             ? JSON.stringify(transformKeys(body, toSnakeCase))
@@ -147,6 +136,4 @@ export const api = {
   delete: <T>(path: string) => request<T>("DELETE", path),
   setToken,
   getToken,
-  setRefreshToken,
-  getRefreshToken,
 };

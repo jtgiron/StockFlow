@@ -3,6 +3,7 @@ import express from "express";
 import helmet from "helmet";
 import compression from "compression";
 import rateLimit from "express-rate-limit";
+import cookieParser from "cookie-parser";
 
 import { corsMiddleware } from "./middlewares/cors.js";
 import { errorHandler } from "./utils/errors.js";
@@ -25,6 +26,7 @@ export function createApp({ enableRateLimit = true } = {}) {
   app.use(helmet());
   app.use(corsMiddleware());
   app.use(compression());
+  app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
   app.use(express.urlencoded({ extended: true, limit: "1mb" }));
 

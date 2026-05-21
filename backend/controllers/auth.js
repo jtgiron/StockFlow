@@ -5,6 +5,8 @@ import {
   generateAccessToken,
   generateRefreshToken,
   verifyToken,
+  getRefreshCookieOptions,
+  REFRESH_COOKIE_NAME,
 } from "../utils/auth.js";
 import { withTransaction } from "../utils/db.js";
 import { AppError } from "../utils/errors.js";
@@ -74,11 +76,11 @@ export const register = async (req, res, next) => {
     const access_token = generateAccessToken(user);
     const refresh_token = generateRefreshToken(user);
 
+    res.cookie(REFRESH_COOKIE_NAME, refresh_token, getRefreshCookieOptions());
     res.status(201).json({
       message: "User registered successfully",
       user,
       access_token,
-      refresh_token,
     });
   } catch (err) {
     next(err);
@@ -120,11 +122,11 @@ export const login = async (req, res, next) => {
     // Remove password_hash from user object
     const { password_hash, ...userWithoutPassword } = user;
 
+    res.cookie(REFRESH_COOKIE_NAME, refresh_token, getRefreshCookieOptions());
     res.json({
       message: "Login successful",
       user: userWithoutPassword,
       access_token,
-      refresh_token,
     });
   } catch (err) {
     next(err);
@@ -133,14 +135,17 @@ export const login = async (req, res, next) => {
 
 export const refreshToken = async (req, res, next) => {
   try {
-    const { refresh_token } = req.body;
+    // Read refresh token from HttpOnly cookie (primary) or body (backward compat)
+    const token = req.cookies?.[REFRESH_COOKIE_NAME] || req.body?.refresh_token;
 
-    if (!refresh_token) {
+    if (!token) {
       throw new AppError(400, "refresh_token es obligatorio");
     }
 
-    const decoded = verifyToken(refresh_token);
+    const decoded = verifyToken(token);
     if (!decoded || decoded.type !== "refresh") {
+      // Clear stale cookie on invalid token
+      res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
       throw new AppError(401, "Refresh token inválido o expirado");
     }
 
@@ -151,6 +156,7 @@ export const refreshToken = async (req, res, next) => {
     );
 
     if (result.rows.length === 0) {
+      res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
       throw new AppError(401, "Usuario no encontrado o desactivado");
     }
 
@@ -159,10 +165,16 @@ export const refreshToken = async (req, res, next) => {
     const access_token = generateAccessToken(user);
     const new_refresh_token = generateRefreshToken(user);
 
-    res.json({ access_token, refresh_token: new_refresh_token });
+    res.cookie(REFRESH_COOKIE_NAME, new_refresh_token, getRefreshCookieOptions());
+    res.json({ access_token });
   } catch (err) {
     next(err);
   }
+};
+
+export const logout = (_req, res) => {
+  res.clearCookie(REFRESH_COOKIE_NAME, { path: "/api/auth" });
+  res.json({ message: "Sesión cerrada" });
 };
 
 export const getProfile = async (req, res, next) => {

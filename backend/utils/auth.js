@@ -61,3 +61,31 @@ export const verifyToken = (token) => {
 };
 
 export const generateSecret = () => crypto.randomBytes(64).toString("hex");
+
+/**
+ * Parse a JWT expiry string (e.g. "7d", "24h", "30m") into milliseconds.
+ */
+function parseExpiryToMs(expiry) {
+  const match = /^(\d+)(s|m|h|d)$/.exec(expiry);
+  if (!match) return 7 * 24 * 60 * 60 * 1000; // default 7d
+  const n = Number(match[1]);
+  const unit = match[2];
+  const multipliers = { s: 1000, m: 60_000, h: 3_600_000, d: 86_400_000 };
+  return n * multipliers[unit];
+}
+
+/**
+ * Build cookie options for the refresh token HttpOnly cookie.
+ */
+export function getRefreshCookieOptions() {
+  const isProduction = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "strict" : "lax",
+    path: "/api/auth",
+    maxAge: parseExpiryToMs(getRefreshExpiry()),
+  };
+}
+
+export const REFRESH_COOKIE_NAME = "refresh_token";
