@@ -1,21 +1,25 @@
+import crypto from 'crypto';
 import forge from 'node-forge';
 import { query } from '../../database.js';
+import { withAdvisoryLock } from '../../utils/db.js';
 import { getWsaaClient } from './client.js';
 
-const WSFE_DESTINATION = {
-  homo: 'cn=wsfe,o=afip,c=ar',
-  prod: 'cn=wsfe,o=arca,c=ar',
-};
+const TOKEN_LOCK_KEY = 20250416;
 
-function buildLoginTicketRequest(env) {
+function buildLoginTicketRequest() {
   const now = new Date();
   const expiration = new Date(now.getTime() + 12 * 60 * 60 * 1000);
+
+  // AFIP requires uniqueId to be unique within ticket validity. Two requests
+  // in the same second collide if we use epoch seconds, so use a random
+  // 31-bit positive integer (fits within int32 signed).
+  const uniqueId = crypto.randomInt(1, 0x7fffffff);
 
   return [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<loginTicketRequest version="1.0">',
     '  <header>',
-    `    <uniqueId>${Math.floor(now.getTime() / 1000)}</uniqueId>`,
+    `    <uniqueId>${uniqueId}</uniqueId>`,
     `    <generationTime>${now.toISOString()}</generationTime>`,
     `    <expirationTime>${expiration.toISOString()}</expirationTime>`,
     '  </header>',
@@ -48,7 +52,7 @@ function signWithCMS(xmlContent, certPem, privateKeyPem) {
 }
 
 async function requestToken(config) {
-  const xml = buildLoginTicketRequest(config.env);
+  const xml = buildLoginTicketRequest();
   const cms = signWithCMS(xml, config.certPem, config.privateKey);
 
   const wsaaClient = await getWsaaClient(config);
@@ -64,35 +68,50 @@ async function requestToken(config) {
     throw new Error(`[ARCA] WSAA response missing token/sign: ${responseXml.slice(0, 200)}`);
   }
 
+  if (!expirationMatch) {
+    throw new Error('[ARCA] WSAA response missing expirationTime — cannot cache token safely');
+  }
+
   return {
     token: tokenMatch[1],
     sign: signMatch[1],
-    expirationTime: expirationMatch ? expirationMatch[1] : null,
+    expirationTime: expirationMatch[1],
   };
 }
 
-export async function getValidToken(config) {
+async function readCachedToken() {
   const cached = await query(
-    `SELECT token, sign, expires_at FROM arca_tokens
-     WHERE service = 'wsfe' AND expires_at > NOW() + INTERVAL '5 minutes'`,
-    []
+    `SELECT token, sign FROM arca_tokens
+     WHERE service = 'wsfe' AND expires_at > NOW() + INTERVAL '5 minutes'`
   );
+  if (cached.rows.length === 0) return null;
+  return { token: cached.rows[0].token, sign: cached.rows[0].sign };
+}
 
-  if (cached.rows.length > 0) {
-    return { token: cached.rows[0].token, sign: cached.rows[0].sign };
-  }
+export async function getValidToken(config) {
+  // Fast path: serve from cache without locking.
+  const cached = await readCachedToken();
+  if (cached) return cached;
 
-  const tokenData = await requestToken(config);
+  // Cold cache: serialize WSAA fetches across processes via advisory lock.
+  // AFIP rejects concurrent token requests for the same CUIT+service.
+  return withAdvisoryLock(TOKEN_LOCK_KEY, async () => {
+    // Re-check inside the lock — another worker may have populated the cache.
+    const recheck = await readCachedToken();
+    if (recheck) return recheck;
 
-  await query(
-    `INSERT INTO arca_tokens (service, token, sign, expires_at)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (service) DO UPDATE
-     SET token = EXCLUDED.token, sign = EXCLUDED.sign,
-         expires_at = EXCLUDED.expires_at, created_at = NOW()`,
-    ['wsfe', tokenData.token, tokenData.sign, tokenData.expirationTime]
-  );
+    const tokenData = await requestToken(config);
 
-  console.log(`[ARCA] New WSAA token fetched, expires at ${tokenData.expirationTime}`);
-  return { token: tokenData.token, sign: tokenData.sign };
+    await query(
+      `INSERT INTO arca_tokens (service, token, sign, expires_at)
+       VALUES ('wsfe', $1, $2, $3)
+       ON CONFLICT (service) DO UPDATE
+       SET token = EXCLUDED.token, sign = EXCLUDED.sign,
+           expires_at = EXCLUDED.expires_at, created_at = NOW()`,
+      [tokenData.token, tokenData.sign, tokenData.expirationTime]
+    );
+
+    console.log(`[ARCA] New WSAA token fetched, expires at ${tokenData.expirationTime}`);
+    return { token: tokenData.token, sign: tokenData.sign };
+  });
 }
